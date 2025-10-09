@@ -96,6 +96,7 @@
     &nbsp;&nbsp;&nbsp;yrc: 网易云音乐逐字歌词解析开关，开启后优先解析逐字歌词。<br />
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;False 禁用(默认)<br />
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;True 启用<br />
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Open 备用启用模式（该模式在没有逐字歌词时不会返回逐行歌词，而是返回空）<br />
     <br /><br />
     GitHub：<a href="https://github.com/injahow/meting-api" target="_blank">meting-api</a>，此API基于 <a href="https://github.com/metowolf/Meting" target="_blank">Meting</a> 构建。当前为<a href="https://github.com/NanoRocky/meting-api" target="_blank">酪灰修改版本</a>。<br /><br /><br />
     例如：<a href="<?php echo API_URI ?>?server=netease&type=url&id=416892104" target="_blank"><?php echo API_URI ?>?server=netease&type=url&id=416892104</a><br />

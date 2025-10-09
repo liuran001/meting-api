@@ -21,7 +21,9 @@ $server = filter_input(INPUT_GET, 'server', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'n
 $type = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS);
 $id = filter_input(INPUT_GET, 'id', FILTER_SANITIZE_SPECIAL_CHARS);
 $br = filter_input(INPUT_GET, 'br', FILTER_SANITIZE_SPECIAL_CHARS) ?: '2147483';
+$dwrc = filter_input(INPUT_GET, 'dwrc', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'false';
 $yrc = filter_input(INPUT_GET, 'yrc', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'false';
+$qrc = filter_input(INPUT_GET, 'qrc', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'false';
 $picsize = filter_input(INPUT_GET, 'picsize', FILTER_SANITIZE_SPECIAL_CHARS) ?: null;
 
 
@@ -55,18 +57,46 @@ use Metowolf\Meting;
 $api = new Meting($server);
 $api->format(true);
 
+define('METING_API', true);
+
+$qmck_file = __DIR__ . '/src/QMCookie.php';
+
+if (file_exists($qmck_file)) {
+    require $qmck_file;
+    if (!empty($QMCookie) && $QMCookie != '' && $QMCookie != 'null' && $QMCookie != 'undefined' && $QMCookie != null) {
+        $tencent_cookie = $QMCookie;
+    } else {
+        $tencent_cookie = 'local';
+    }
+} else {
+    $tencent_cookie = 'local';
+};
+
 // 设置cookie
 if ($server == 'netease') {
     $api->cookie('');
-} else if ($server == 'tencent') {
+} else if ($server == 'tencent' && $tencent_cookie == 'local') {
     $api->cookie('');
-}
-
-if ($yrc ==  'true') {
-    $api->yrc(true);
+} else if ($server == 'tencent' && $tencent_cookie != 'local') {
+    $api->cookie($tencent_cookie);
 } else {
-    $api->yrc(false);
-}
+    echo '{"error":"不支持的音乐源"}';
+    exit;
+};
+
+if (($dwrc == 'true') || ($yrc == 'true') || ($qrc == 'true')) {
+    $api->dwrc(true);
+    $api->bakdwrc(false);
+    $dwrc = 'true';
+} else if (($dwrc == 'open') || ($yrc == 'open') || ($qrc == 'open')) {
+    $api->dwrc(true);
+    $api->bakdwrc(true);
+    $dwrc = 'open';
+} else {
+    $api->dwrc(false);
+    $api->bakdwrc(false);
+    $dwrc = 'false';
+};
 
 if ($type == 'playlist') {
 
@@ -82,15 +112,15 @@ if ($type == 'playlist') {
 
     $data = $api->playlist($id);
     if ($data == '[]') {
-        echo '{"error":"unknown playlist id"}';
+        echo '{"error":"id 为空，无法处理"}';
         exit;
     }
     $data = json_decode($data);
     $playlist = array();
     foreach ($data as $song) {
         $lrc_url = API_URI . '?server=' . $song->source . '&type=lrc&id=' . $song->lyric_id . (AUTH ? '&auth=' . auth($song->source . 'lrc' . $song->lyric_id) : '');
-        if ($yrc == 'true') {
-            $lrc_url .= '&yrc=true';
+        if ($dwrc == 'true') {
+            $lrc_url .= '&dwrc=true';
         }
 
         $playlist[] = array(
@@ -112,7 +142,7 @@ if ($type == 'playlist') {
     echo $playlist;
 } else if ($type == 'search') {
     if (!isset($_GET['keyword'])) {
-        echo '{"error":"missing keyword"}';
+        echo '{"error":"请输入搜索关键词"}';
         exit;
     }
 
@@ -133,8 +163,8 @@ if ($type == 'playlist') {
     $search = array();
     foreach ($data_array as $song) {
         $lrc_url = API_URI . '?server=' . $song['source'] . '&type=lrc&id=' . $song['lyric_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'lrc' . $song['lyric_id']) : '');
-        if ($yrc == 'true') {
-            $lrc_url .= '&yrc=true';
+        if ($dwrc == 'true') {
+            $lrc_url .= '&dwrc=true';
         }
 
         $search[] = array(
@@ -155,7 +185,7 @@ if ($type == 'playlist') {
 } else {
     $need_song = !in_array($type, ['url', 'pic', 'lrc']);
     if ($need_song && !in_array($type, ['name', 'artist', 'song'])) {
-        echo '{"error":"unknown type"}';
+        echo '{"error":"不支持的操作"}';
         exit;
     }
 
@@ -175,7 +205,7 @@ if ($type == 'playlist') {
     }
 
     if (!$need_song) {
-        $data = song2data($api, null, $type, $id, $yrc, $picsize, $br);
+        $data = song2data($api, null, $type, $id, $dwrc, $picsize, $br);
     } else {
         if (!isset($song)) $song = $api->song($id);
         if ($song == '[]') {
@@ -185,7 +215,7 @@ if ($type == 'playlist') {
         if (APCU_CACHE) {
             apcu_store($apcu_song_id_key, $song, $apcu_time);
         }
-        $data = song2data($api, json_decode($song)[0], $type, $id, $yrc, $picsize, $br);
+        $data = song2data($api, json_decode($song)[0], $type, $id, $dwrc, $picsize, $br);
     }
 
     if (APCU_CACHE) {
@@ -197,7 +227,13 @@ if ($type == 'playlist') {
 
 function api_uri() // static
 {
-    return (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . strtok($_SERVER['REQUEST_URI'], '?');
+    if (defined('Only_Https') && Only_Https === true) {
+        $protocol = 'https://';
+    } else {
+        $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://');
+    };
+
+    return $protocol . $_SERVER['HTTP_HOST'] . strtok($_SERVER['REQUEST_URI'], '?');
 }
 
 function auth($name)
@@ -205,7 +241,7 @@ function auth($name)
     return hash_hmac('sha1', $name, AUTH_SECRET);
 }
 
-function song2data($api, $song, $type, $id, $yrc, $picsize, $br)
+function song2data($api, $song, $type, $id, $dwrc, $picsize, $br)
 {
     $data = '';
     switch ($type) {
@@ -223,19 +259,28 @@ function song2data($api, $song, $type, $id, $yrc, $picsize, $br)
             // url format
             if ($api->server == 'netease') {
                 if ($m_url[4] != 's') $m_url = str_replace('http', 'https', $m_url);
-            }
-
+            };
+            if (strpos($m_url, 'http://') === 0) {
+                $m_url = str_replace('http://', 'https://', $m_url);
+            } elseif (strpos($m_url, 'https://') !== 0) {
+                $m_url = 'https://' . ltrim($m_url, ':/');
+            };
             $data = $m_url;
             break;
 
         case 'pic':
             $data = json_decode($api->pic($id, $picsize))->url;
+            if (strpos($data, 'http://') === 0) {
+                $data = str_replace('http://', 'https://', $data);
+            } elseif (strpos($data, 'https://') !== 0) {
+                $data = 'https://' . ltrim($data, ':/');
+            };
             break;
 
         case 'lrc':
             $lrc_data = json_decode($api->lyric($id));
             if ($lrc_data->lyric == '') {
-                $lrc = '[00:00.00]这似乎是一首纯音乐呢，请尽情欣赏它吧！';
+                $lrc = '';
             } else if ($lrc_data->tlyric == '') {
                 $lrc = $lrc_data->lyric;
             } else if (TLYRIC) { // lyric_cn
@@ -265,21 +310,20 @@ function song2data($api, $song, $type, $id, $yrc, $picsize, $br)
             $data = $lrc;
             break;
 
-            case 'song':
-                $lrc_url = API_URI . '?server=' . $song->source . '&type=lrc&id=' . $song->lyric_id . (AUTH ? '&auth=' . auth($song->source . 'lrc' . $song->lyric_id) : '');
-                if ($yrc == 'true') {
-                    $lrc_url .= '&yrc=true';
-                }
+        case 'song':
+            $lrc_url = API_URI . '?server=' . $song->source . '&type=lrc&id=' . $song->lyric_id . (AUTH ? '&auth=' . auth($song->source . 'lrc' . $song->lyric_id) : '');
+            if ($dwrc == 'true') {
+                $lrc_url .= '&dwrc=true';
+            }
 
-                $data = json_encode(array(array(
-                    'name'   => $song->name,
-                    'artist' => implode('/', $song->artist),
-                    'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
-                    'pic'    => API_URI . '?server=' . $song->source . '&type=pic&id=' . $song->pic_id . (AUTH ? '&auth=' . auth($song->source . 'pic' . $song->pic_id) : ''),
-                    'lrc'    => $lrc_url
-                )));
-                break;
-
+            $data = json_encode(array(array(
+                'name'   => $song->name,
+                'artist' => implode('/', $song->artist),
+                'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
+                'pic'    => API_URI . '?server=' . $song->source . '&type=pic&id=' . $song->pic_id . (AUTH ? '&auth=' . auth($song->source . 'pic' . $song->pic_id) : ''),
+                'lrc'    => $lrc_url
+            )));
+            break;
     }
     if ($data == '') exit;
     return $data;
