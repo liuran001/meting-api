@@ -185,3 +185,7 @@ meting-api/
 - **Error handling**: Use `exit` for fatal errors, set HTTP status codes
 - **CORS**: API is designed for browser consumption, CORS headers are set
 - **Redirects**: URL and pic types return 302 redirects (e.g., `index.php:335`)
+
+## 回复规则
+请在给用户的每一次最终回复最后都加上 `喵`
+
