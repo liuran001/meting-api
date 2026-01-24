@@ -1,16 +1,20 @@
 <?php
-// 设置API路径
-define('API_URI', api_uri());
-// 设置中文歌词
-define('TLYRIC', true);
-// 设置歌单文件缓存及时间
-define('CACHE', false);
-define('CACHE_TIME', 86400);
-// 设置短期缓存-需要安装apcu
-define('APCU_CACHE', false);
-// 设置AUTH密钥-更改'meting-secret'
-define('AUTH', false);
-define('AUTH_SECRET', 'meting-secret');
+// 路由处理 - 如果请求的是 query.php，直接处理
+if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/query.php') !== false) {
+    include __DIR__ . '/query.php';
+    exit;
+}
+
+// 路由处理 - 如果请求的是 handsome.php，开启兼容模式
+if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/handsome.php') !== false) {
+    $_GET['handsome'] = 'true';
+    if (!defined('HANDSOME_MODE')) {
+        define('HANDSOME_MODE', true);
+    }
+}
+
+// 加载配置文件
+$config = require __DIR__ . '/config/loader.php';
 
 if (!isset($_GET['type']) || !isset($_GET['id'])) {
     include __DIR__ . '/public/index.php';
@@ -20,8 +24,19 @@ if (!isset($_GET['type']) || !isset($_GET['id'])) {
 $server = filter_input(INPUT_GET, 'server', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'netease';
 $type = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS);
 $id = filter_input(INPUT_GET, 'id', FILTER_SANITIZE_SPECIAL_CHARS);
-$br = filter_input(INPUT_GET, 'br', FILTER_SANITIZE_SPECIAL_CHARS) ?: '2147483';
+$br = filter_input(INPUT_GET, 'br', FILTER_SANITIZE_SPECIAL_CHARS) ?: $config['default_br'];
 $dwrc = filter_input(INPUT_GET, 'dwrc', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'false';
+$handsome = filter_input(INPUT_GET, 'handsome', FILTER_SANITIZE_SPECIAL_CHARS);
+// filter_input 不会读取运行时写入的 $_GET，这里兜底一次
+if ($handsome === null || $handsome === false || $handsome === '') {
+    $handsome = isset($_GET['handsome']) ? $_GET['handsome'] : 'false';
+}
+// 规范化为字符串 'true' 或 'false'
+if (defined('HANDSOME_MODE') && HANDSOME_MODE === true) {
+    $handsome = 'true';
+} else {
+    $handsome = strtolower(trim($handsome)) === 'true' ? 'true' : 'false';
+}
 $yrc = filter_input(INPUT_GET, 'yrc', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'false';
 $qrc = filter_input(INPUT_GET, 'qrc', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'false';
 $picsize = filter_input(INPUT_GET, 'picsize', FILTER_SANITIZE_SPECIAL_CHARS) ?: null;
@@ -37,8 +52,19 @@ if (AUTH) {
     }
 }
 
+// PV统计 - 记录请求
+if (!in_array($type, ['url', 'pic'])) {
+    include __DIR__ . '/src/PV.php';
+    $pv = new \Metowolf\PV();
+    $ip = getIP();
+    $ref = getRef();
+    $pv->record($ip, $ref, $server, $type, $id);
+}
+
 // 数据格式
-if (in_array($type, ['song', 'playlist', 'search'])) {
+if ($handsome == 'true' && in_array($type, ['song', 'playlist'])) {
+    header('content-type: application/javascript; charset=utf-8;');
+} else if (in_array($type, ['song', 'playlist', 'search'])) {
     header('content-type: application/json; charset=utf-8;');
 } else if (in_array($type, ['name', 'lrc', 'artist'])) {
     header('content-type: text/plain; charset=utf-8;');
@@ -57,9 +83,12 @@ use Metowolf\Meting;
 $api = new Meting($server);
 $api->format(true);
 
-define('METING_API', true);
+if (!defined('METING_API')) {
+    define('METING_API', true);
+}
 
-$qmck_file = __DIR__ . '/src/QMCookie.php';
+// QQ音乐 Cookie 配置
+$qmck_file = $config['qm_cookie_file'];
 
 if (file_exists($qmck_file)) {
     require $qmck_file;
@@ -101,7 +130,7 @@ if (($dwrc == 'true') || ($yrc == 'true') || ($qrc == 'true')) {
 if ($type == 'playlist') {
 
     if (CACHE) {
-        $file_path = __DIR__ . '/cache/playlist/' . $server . '_' . $id . '.json';
+        $file_path = $config['cache_dir'] . '/playlist/' . $server . '_' . $id . '.json';
         if (file_exists($file_path)) {
             if ($_SERVER['REQUEST_TIME'] - filemtime($file_path) < CACHE_TIME) {
                 echo file_get_contents($file_path);
@@ -117,6 +146,10 @@ if ($type == 'playlist') {
     }
     $data = json_decode($data);
     $playlist = array();
+    
+    // Handsome 主题兼容模式
+    $pic_key = ($handsome == 'true') ? 'cover' : 'pic';
+    
     foreach ($data as $song) {
         $lrc_url = API_URI . '?server=' . $song->source . '&type=lrc&id=' . $song->lyric_id . (AUTH ? '&auth=' . auth($song->source . 'lrc' . $song->lyric_id) : '');
         if ($dwrc == 'true') {
@@ -127,7 +160,7 @@ if ($type == 'playlist') {
             'name'   => $song->name,
             'artist' => implode('/', $song->artist),
             'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
-            'pic'    => API_URI . '?server=' . $song->source . '&type=pic&id=' . $song->pic_id . (AUTH ? '&auth=' . auth($song->source . 'pic' . $song->pic_id) : ''),
+            $pic_key    => API_URI . '?server=' . $song->source . '&type=pic&id=' . $song->pic_id . (AUTH ? '&auth=' . auth($song->source . 'pic' . $song->pic_id) : ''),
             'lrc'    => $lrc_url
         );
     }
@@ -161,6 +194,10 @@ if ($type == 'playlist') {
     }
 
     $search = array();
+    
+    // Handsome 主题兼容模式
+    $pic_key = ($handsome == 'true') ? 'cover' : 'pic';
+    
     foreach ($data_array as $song) {
         $lrc_url = API_URI . '?server=' . $song['source'] . '&type=lrc&id=' . $song['lyric_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'lrc' . $song['lyric_id']) : '');
         if ($dwrc == 'true') {
@@ -172,7 +209,7 @@ if ($type == 'playlist') {
             'artist' => implode('/', $song['artist']),
             'album'  => $song['album'],
             'url'    => API_URI . '?server=' . $song['source'] . '&type=url&id=' . $song['url_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'url' . $song['url_id']) : ''),
-            'pic'    => API_URI . '?server=' . $song['source'] . '&type=pic&id=' . $song['pic_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'pic' . $song['pic_id']) : ''),
+            $pic_key    => API_URI . '?server=' . $song['source'] . '&type=pic&id=' . $song['pic_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'pic' . $song['pic_id']) : ''),
             'lrc'    => $lrc_url,
             'source' => $song['source']
         );
@@ -205,7 +242,7 @@ if ($type == 'playlist') {
     }
 
     if (!$need_song) {
-        $data = song2data($api, null, $type, $id, $dwrc, $picsize, $br);
+        $data = song2data($api, null, $type, $id, $dwrc, $picsize, $br, $handsome);
     } else {
         if (!isset($song)) $song = $api->song($id);
         if ($song == '[]') {
@@ -215,7 +252,7 @@ if ($type == 'playlist') {
         if (APCU_CACHE) {
             apcu_store($apcu_song_id_key, $song, $apcu_time);
         }
-        $data = song2data($api, json_decode($song)[0], $type, $id, $dwrc, $picsize, $br);
+        $data = song2data($api, json_decode($song)[0], $type, $id, $dwrc, $picsize, $br, $handsome);
     }
 
     if (APCU_CACHE) {
@@ -236,12 +273,34 @@ function api_uri() // static
     return $protocol . $_SERVER['HTTP_HOST'] . strtok($_SERVER['REQUEST_URI'], '?');
 }
 
+function getIP()
+{
+    if (getenv("HTTP_CLIENT_IP"))
+        $ip = getenv("HTTP_CLIENT_IP");
+    else if(getenv("HTTP_X_FORWARDED_FOR"))
+        $ip = getenv("HTTP_X_FORWARDED_FOR");
+    else if(getenv("REMOTE_ADDR"))
+        $ip = getenv("REMOTE_ADDR");
+    else 
+        $ip = "Unknow";
+    return $ip;
+}
+
+function getRef()
+{
+    if(isset($_SERVER['HTTP_REFERER'])){
+        return $_SERVER['HTTP_REFERER'];
+    } else {
+        return "url";
+    }
+}
+
 function auth($name)
 {
     return hash_hmac('sha1', $name, AUTH_SECRET);
 }
 
-function song2data($api, $song, $type, $id, $dwrc, $picsize, $br)
+function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'false')
 {
     $data = '';
     switch ($type) {
@@ -316,11 +375,14 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br)
                 $lrc_url .= '&dwrc=true';
             }
 
+            // Handsome 主题兼容模式
+            $pic_key = ($handsome == 'true') ? 'cover' : 'pic';
+
             $data = json_encode(array(array(
                 'name'   => $song->name,
                 'artist' => implode('/', $song->artist),
                 'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
-                'pic'    => API_URI . '?server=' . $song->source . '&type=pic&id=' . $song->pic_id . (AUTH ? '&auth=' . auth($song->source . 'pic' . $song->pic_id) : ''),
+                $pic_key    => API_URI . '?server=' . $song->source . '&type=pic&id=' . $song->pic_id . (AUTH ? '&auth=' . auth($song->source . 'pic' . $song->pic_id) : ''),
                 'lrc'    => $lrc_url
             )));
             break;

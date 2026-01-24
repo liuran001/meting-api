@@ -560,9 +560,13 @@ class Meting
     {
         switch ($this->server) {
             case 'netease':
+                // 优先使用配置文件中的 cookie，否则使用默认值
+                $netease_cookie = defined('NETEASE_COOKIE') && NETEASE_COOKIE !== '' 
+                    ? NETEASE_COOKIE 
+                    : 'appver=8.2.30; os=iPhone OS; osver=15.0; EVNSM=1.0.0; buildver=2206; channel=distribution; machineid=iPhone13.3';
                 return array(
                     'Referer'         => 'https://music.163.com/',
-                    'Cookie'          => 'appver=8.2.30; os=iPhone OS; osver=15.0; EVNSM=1.0.0; buildver=2206; channel=distribution; machineid=iPhone13.3',
+                    'Cookie'          => $netease_cookie,
                     'User-Agent'      => 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 CloudMusic/0.1.1 NeteaseMusic/8.2.30',
                     'X-Real-IP'       => long2ip(mt_rand(1884815360, 1884890111)),
                     'Accept'          => '*/*',
