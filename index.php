@@ -50,14 +50,12 @@ if (AUTH) {
     }
 }
 
-// PV统计 - 记录请求
-if (!in_array($type, ['url', 'pic'])) {
-    include __DIR__ . '/src/PV.php';
-    $pv = new \Metowolf\PV();
-    $ip = getIP();
-    $ref = getRef();
-    $pv->record($ip, $ref, $server, $type, $id);
-}
+// PV统计 - 记录所有API请求
+include __DIR__ . '/src/PV.php';
+$pv = new \Metowolf\PV();
+$ip = getIP();
+$ref = getRef();
+$pv->record($ip, $ref, $server, $type, $id);
 
 // 数据格式
 if ($handsome == 'true' && in_array($type, ['song', 'playlist'])) {
