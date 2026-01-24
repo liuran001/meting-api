@@ -260,6 +260,29 @@
         }
         pre.json { background: #FAFAFA; border: 1px dashed var(--md-outline); padding: 12px; border-radius: 12px; overflow: auto; max-height: 320px; }
         :root[data-theme="dark"] pre.json { background: #1C1B1F; color: #E6E1E5; }
+        pre.json.media-preview { padding: 12px; background: transparent; border: none; }
+        .result-box {
+            background: #FAFAFA;
+            border: 1px dashed var(--md-outline);
+            padding: 12px;
+            border-radius: 12px;
+            overflow: auto;
+            max-height: 320px;
+            white-space: pre-wrap;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            word-break: break-all;
+            overflow-wrap: break-word;
+        }
+        :root[data-theme="dark"] .result-box {
+            background: #1C1B1F;
+            color: #E6E1E5;
+        }
+        .result-box.media-content {
+            background: transparent;
+            border: none;
+            padding: 0;
+            white-space: normal;
+        }
         .handsome-code { 
             color: #1C1B1F;
             word-break: break-all;
@@ -343,7 +366,7 @@
                         </div>
                         <div class="field">
                             <label class="label" for="id">类型ID id（封面/单曲/歌单）</label>
-                            <input id="id" class="input" name="id" placeholder="例如 2619366284 或 591321；搜索时填 0" value="2619366284" />
+                            <input id="id" class="input" name="id" placeholder="例如 8900628861 或 1969519579；搜索时填 0" value="8900628861" />
                         </div>
                         <div class="field">
                             <label class="label" for="keyword">搜索关键词 keyword（仅 search）</label>
@@ -380,7 +403,7 @@
                     <div style="margin-top: 12px;" class="mono">请求地址：<span id="reqUrl"></span></div>
                     <div style="margin-top: 12px;">
                         <strong>返回结果</strong>
-                        <pre id="result" class="json mono">（等待调用）</pre>
+                        <div id="result" class="result-box">（等待调用）</div>
                     </div>
                 </div>
             </div>
@@ -439,9 +462,9 @@
 
                     <div class="section example-list">
                         <div class="label">示例</div>
-                        <a href="<?php echo API_URI ?>?server=netease&type=url&id=416892104" target="_blank"><?php echo API_URI ?>?server=netease&type=url&id=416892104</a><br />
-                        <a href="<?php echo API_URI ?>?server=netease&type=song&id=591321" target="_blank"><?php echo API_URI ?>?server=netease&type=song&id=591321</a><br />
-                        <a href="<?php echo API_URI ?>?server=netease&type=playlist&id=2619366284&yrc=true" target="_blank"><?php echo API_URI ?>?server=netease&type=playlist&id=2619366284&yrc=true</a><br />
+                        <a href="<?php echo API_URI ?>?server=netease&type=url&id=1969519579" target="_blank"><?php echo API_URI ?>?server=netease&type=url&id=1969519579</a><br />
+                        <a href="<?php echo API_URI ?>?server=netease&type=song&id=1969519579" target="_blank"><?php echo API_URI ?>?server=netease&type=song&id=1969519579</a><br />
+                        <a href="<?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&yrc=true" target="_blank"><?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&yrc=true</a><br />
                         <a href="<?php echo API_URI ?>?server=netease&type=search&id=0&yrc=true&keyword=寄往未来的信" target="_blank"><?php echo API_URI ?>?server=netease&type=search&id=0&yrc=true&keyword=寄往未来的信</a>
                     </div>
 
@@ -520,7 +543,7 @@
         let apInstance = null;
         async function initDefaultPlayer() {
             try {
-                const res = await fetch(`<?php echo API_URI ?>?server=netease&type=playlist&id=2619366284&yrc=false`);
+                const res = await fetch(`<?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&yrc=false`);
                 const json = await res.json();
                 const playlist = await normalizeToAPlayer(json);
                 apInstance = new APlayer({
@@ -552,14 +575,52 @@
             const url = buildUrl(formData);
             document.getElementById('reqUrl').textContent = url;
             const resultEl = document.getElementById('result');
+            const type = formData.type;
+            
             try {
                 const res = await fetch(url, { redirect: 'follow' });
                 const contentType = res.headers.get('content-type') || '';
+                
+                // 特殊处理：url类型显示音频播放器
+                if (type === 'url') {
+                    const audioUrl = res.url; // 重定向后的实际URL
+                    resultEl.className = 'result-box media-content';
+                    resultEl.innerHTML = `
+                        <audio controls style="width: 100%; margin: 0 0 12px 0;">
+                            <source src="${audioUrl}" type="audio/mpeg">
+                            您的浏览器不支持音频播放。
+                        </audio>
+                        <div style="word-break: break-all;">
+                            <strong>音频地址：</strong><br/>
+                            <a href="${audioUrl}" target="_blank" style="color: var(--md-primary);">${audioUrl}</a>
+                        </div>
+                    `;
+                    document.getElementById('loadToPlayer').disabled = true;
+                    return;
+                }
+                
+                // 特殊处理：pic类型显示图片
+                if (type === 'pic') {
+                    const picUrl = res.url; // 重定向后的实际URL
+                    resultEl.className = 'result-box media-content';
+                    resultEl.innerHTML = `
+                        <a href="${picUrl}" target="_blank" style="display: block; text-align: center; margin-bottom: 12px;">
+                            <img src="${picUrl}" alt="封面图片" style="max-width: 100%; max-height: 400px; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+                        </a>
+                        <div style="word-break: break-all; text-align: center;">
+                            <strong>图片地址：</strong><br/>
+                            <a href="${picUrl}" target="_blank" style="color: var(--md-primary);">${picUrl}</a>
+                        </div>
+                    `;
+                    document.getElementById('loadToPlayer').disabled = true;
+                    return;
+                }
+                
                 if (contentType.includes('application/json')) {
                     const json = await res.json();
+                    resultEl.className = 'result-box';
                     resultEl.textContent = JSON.stringify(json, null, 2);
                     const loadBtn = document.getElementById('loadToPlayer');
-                    const type = formData.type;
                     // 只有返回 song/playlist 的 JSON 时允许加载到播放器
                     if (Array.isArray(json) && (type === 'song' || type === 'playlist')) {
                         loadBtn.disabled = false;
@@ -586,7 +647,8 @@
                         loadBtn.onclick = null;
                     }
                 } else {
-                    // 可能是重定向或文本，如 url/pic 类型
+                    // 其他文本类型（如 lrc, name, artist）
+                    resultEl.className = 'result-box';
                     resultEl.textContent = await res.text();
                     document.getElementById('loadToPlayer').disabled = true;
                 }
