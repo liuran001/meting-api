@@ -258,8 +258,17 @@ if ($type == 'playlist') {
 
     if (APCU_CACHE) {
         $apcu_time = $type == 'url' ? 600 : 36000;
-        // 包含音质参数在缓存键中，实现不同音质的独立缓存
-        $apcu_type_key = $server . $type . $id . '_br' . $br;
+        // 根据不同类型构建缓存键
+        if ($type == 'lrc') {
+            // 歌词缓存需要包含dwrc参数（yrc/qrc会被统一为dwrc）
+            $apcu_type_key = $server . $type . $id . '_dwrc' . $dwrc;
+        } else if ($type == 'url') {
+            // url缓存需要包含音质参数
+            $apcu_type_key = $server . $type . $id . '_br' . $br;
+        } else {
+            // 其他类型（pic, name, artist等）不受br和dwrc影响
+            $apcu_type_key = $server . $type . $id;
+        }
         if (apcu_exists($apcu_type_key)) {
             $data = apcu_fetch($apcu_type_key);
             return_data($type, $data);
