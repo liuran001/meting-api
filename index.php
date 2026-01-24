@@ -50,12 +50,42 @@ if (AUTH) {
     }
 }
 
-// PV统计 - 记录所有API请求
-include __DIR__ . '/src/PV.php';
-$pv = new \Metowolf\PV();
+// PV统计 - 异步记录所有API请求，防止高并发时阻塞主请求
 $ip = getIP();
 $ref = getRef();
-$pv->record($ip, $ref, $server, $type, $id);
+// 在后台异步运行PV记录脚本，不阻塞主请求
+$pv_script = __DIR__ . '/src/record_pv_async.php';
+// 兼容多种环境获取PHP执行路径
+if (defined('PHP_EXECUTABLE')) {
+    $php_path = PHP_EXECUTABLE;
+} else {
+    // 降级方案：尝试从常见位置找到php
+    $php_path = null;
+    foreach (['/usr/bin/php', '/usr/local/bin/php', 'php'] as $path) {
+        if (is_file($path) || `which $path 2>/dev/null`) {
+            $php_path = $path;
+            break;
+        }
+    }
+    if (!$php_path) {
+        $php_path = 'php'; // 最后的备选方案
+    }
+}
+// 使用 proc_open 在后台运行PV记录，立即返回
+$descriptors = array();
+$process = @proc_open(
+    escapeshellcmd($php_path) . ' ' . escapeshellarg($pv_script) . ' ' . 
+    escapeshellarg($ip) . ' ' . 
+    escapeshellarg($ref) . ' ' . 
+    escapeshellarg($server) . ' ' . 
+    escapeshellarg($type) . ' ' . 
+    escapeshellarg($id),
+    $descriptors,
+    $pipes
+);
+if (is_resource($process)) {
+    proc_close($process);
+}
 
 // 数据格式
 if ($handsome == 'true' && in_array($type, ['song', 'playlist'])) {
