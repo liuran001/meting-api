@@ -103,7 +103,9 @@ if (file_exists($qmck_file)) {
 
 // 设置cookie
 if ($server == 'netease') {
-    $api->cookie('');
+    // 从配置读取网易云Cookie
+    $netease_cookie = $config['netease_cookie'] ?? '';
+    $api->cookie($netease_cookie);
 } else if ($server == 'tencent' && $tencent_cookie == 'local') {
     $api->cookie('');
 } else if ($server == 'tencent' && $tencent_cookie != 'local') {
