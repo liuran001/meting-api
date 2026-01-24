@@ -25,7 +25,7 @@ $server = filter_input(INPUT_GET, 'server', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'n
 $type = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_SPECIAL_CHARS);
 $id = filter_input(INPUT_GET, 'id', FILTER_SANITIZE_SPECIAL_CHARS);
 $br = filter_input(INPUT_GET, 'br', FILTER_SANITIZE_SPECIAL_CHARS) ?: $config['default_br'];
-$dwrc = filter_input(INPUT_GET, 'dwrc', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'false';
+$yrc = filter_input(INPUT_GET, 'yrc', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'false';
 $handsome = filter_input(INPUT_GET, 'handsome', FILTER_SANITIZE_SPECIAL_CHARS);
 // filter_input 不会读取运行时写入的 $_GET，这里兜底一次
 if ($handsome === null || $handsome === false || $handsome === '') {
@@ -37,8 +37,6 @@ if (defined('HANDSOME_MODE') && HANDSOME_MODE === true) {
 } else {
     $handsome = strtolower(trim($handsome)) === 'true' ? 'true' : 'false';
 }
-$yrc = filter_input(INPUT_GET, 'yrc', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'false';
-$qrc = filter_input(INPUT_GET, 'qrc', FILTER_SANITIZE_SPECIAL_CHARS) ?: 'false';
 $picsize = filter_input(INPUT_GET, 'picsize', FILTER_SANITIZE_SPECIAL_CHARS) ?: null;
 
 
@@ -115,11 +113,12 @@ if ($server == 'netease') {
     exit;
 };
 
-if (($dwrc == 'true') || ($yrc == 'true') || ($qrc == 'true')) {
+// 统一使用yrc参数，内部用dwrc变量处理
+if ($yrc == 'true') {
     $api->dwrc(true);
     $api->bakdwrc(false);
     $dwrc = 'true';
-} else if (($dwrc == 'open') || ($yrc == 'open') || ($qrc == 'open')) {
+} else if ($yrc == 'open') {
     $api->dwrc(true);
     $api->bakdwrc(true);
     $dwrc = 'open';
@@ -168,7 +167,9 @@ if ($type == 'playlist') {
     foreach ($data as $song) {
         $lrc_url = API_URI . '?server=' . $song->source . '&type=lrc&id=' . $song->lyric_id . (AUTH ? '&auth=' . auth($song->source . 'lrc' . $song->lyric_id) : '');
         if ($dwrc == 'true') {
-            $lrc_url .= '&dwrc=true';
+            $lrc_url .= '&yrc=true';
+        } else if ($dwrc == 'open') {
+            $lrc_url .= '&yrc=open';
         }
 
         $playlist[] = array(
@@ -223,7 +224,9 @@ if ($type == 'playlist') {
     foreach ($data_array as $song) {
         $lrc_url = API_URI . '?server=' . $song['source'] . '&type=lrc&id=' . $song['lyric_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'lrc' . $song['lyric_id']) : '');
         if ($dwrc == 'true') {
-            $lrc_url .= '&dwrc=true';
+            $lrc_url .= '&yrc=true';
+        } else if ($dwrc == 'open') {
+            $lrc_url .= '&yrc=open';
         }
 
         $search[] = array(
@@ -413,7 +416,9 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
         case 'song':
             $lrc_url = API_URI . '?server=' . $song->source . '&type=lrc&id=' . $song->lyric_id . (AUTH ? '&auth=' . auth($song->source . 'lrc' . $song->lyric_id) : '');
             if ($dwrc == 'true') {
-                $lrc_url .= '&dwrc=true';
+                $lrc_url .= '&yrc=true';
+            } else if ($dwrc == 'open') {
+                $lrc_url .= '&yrc=open';
             }
 
             // Handsome 主题兼容模式
