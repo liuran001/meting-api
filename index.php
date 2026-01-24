@@ -132,10 +132,25 @@ if (($dwrc == 'true') || ($yrc == 'true') || ($qrc == 'true')) {
 if ($type == 'playlist') {
 
     if (CACHE) {
-        $file_path = $config['cache_dir'] . '/playlist/' . $server . '_' . $id . '.json';
+        // 统一使用标准格式缓存，包含音质参数实现不同音质的独立缓存
+        $cache_key = $server . '_' . $id . '_br' . $br;
+        $file_path = $config['cache_dir'] . '/playlist/' . $cache_key . '.json';
         if (file_exists($file_path)) {
             if ($_SERVER['REQUEST_TIME'] - filemtime($file_path) < CACHE_TIME) {
-                echo file_get_contents($file_path);
+                $cached_data = file_get_contents($file_path);
+                // 如果是handsome模式，动态转换pic为cover
+                if ($handsome == 'true') {
+                    $playlist_array = json_decode($cached_data, true);
+                    foreach ($playlist_array as &$item) {
+                        if (isset($item['pic'])) {
+                            $item['cover'] = $item['pic'];
+                            unset($item['pic']);
+                        }
+                    }
+                    echo json_encode($playlist_array);
+                } else {
+                    echo $cached_data;
+                }
                 exit;
             }
         }
@@ -149,9 +164,7 @@ if ($type == 'playlist') {
     $data = json_decode($data);
     $playlist = array();
     
-    // Handsome 主题兼容模式
-    $pic_key = ($handsome == 'true') ? 'cover' : 'pic';
-    
+    // 统一使用标准格式'pic'构建数据
     foreach ($data as $song) {
         $lrc_url = API_URI . '?server=' . $song->source . '&type=lrc&id=' . $song->lyric_id . (AUTH ? '&auth=' . auth($song->source . 'lrc' . $song->lyric_id) : '');
         if ($dwrc == 'true') {
@@ -162,19 +175,28 @@ if ($type == 'playlist') {
             'name'   => $song->name,
             'artist' => implode('/', $song->artist),
             'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
-            $pic_key    => API_URI . '?server=' . $song->source . '&type=pic&id=' . $song->pic_id . (AUTH ? '&auth=' . auth($song->source . 'pic' . $song->pic_id) : ''),
+            'pic'    => API_URI . '?server=' . $song->source . '&type=pic&id=' . $song->pic_id . (AUTH ? '&auth=' . auth($song->source . 'pic' . $song->pic_id) : ''),
             'lrc'    => $lrc_url
         );
     }
 
-    $playlist = json_encode($playlist);
-
+    // 先保存标准格式的缓存
+    $playlist_json = json_encode($playlist);
     if (CACHE) {
         // ! mkdir /cache/playlist
-        file_put_contents($file_path, $playlist);
+        file_put_contents($file_path, $playlist_json);
     }
 
-    echo $playlist;
+    // 如果是handsome模式，转换pic为cover后再输出
+    if ($handsome == 'true') {
+        foreach ($playlist as &$item) {
+            $item['cover'] = $item['pic'];
+            unset($item['pic']);
+        }
+        echo json_encode($playlist);
+    } else {
+        echo $playlist_json;
+    }
 } else if ($type == 'search') {
     if (!isset($_GET['keyword'])) {
         echo '{"error":"请输入搜索关键词"}';
@@ -197,9 +219,7 @@ if ($type == 'playlist') {
 
     $search = array();
     
-    // Handsome 主题兼容模式
-    $pic_key = ($handsome == 'true') ? 'cover' : 'pic';
-    
+    // 统一使用标准格式'pic'构建数据
     foreach ($data_array as $song) {
         $lrc_url = API_URI . '?server=' . $song['source'] . '&type=lrc&id=' . $song['lyric_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'lrc' . $song['lyric_id']) : '');
         if ($dwrc == 'true') {
@@ -211,10 +231,18 @@ if ($type == 'playlist') {
             'artist' => implode('/', $song['artist']),
             'album'  => $song['album'],
             'url'    => API_URI . '?server=' . $song['source'] . '&type=url&id=' . $song['url_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'url' . $song['url_id']) : ''),
-            $pic_key    => API_URI . '?server=' . $song['source'] . '&type=pic&id=' . $song['pic_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'pic' . $song['pic_id']) : ''),
+            'pic'    => API_URI . '?server=' . $song['source'] . '&type=pic&id=' . $song['pic_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'pic' . $song['pic_id']) : ''),
             'lrc'    => $lrc_url,
             'source' => $song['source']
         );
+    }
+
+    // 如果是handsome模式，转换pic为cover
+    if ($handsome == 'true') {
+        foreach ($search as &$item) {
+            $item['cover'] = $item['pic'];
+            unset($item['pic']);
+        }
     }
 
     $search = json_encode($search, JSON_UNESCAPED_UNICODE);
@@ -230,12 +258,14 @@ if ($type == 'playlist') {
 
     if (APCU_CACHE) {
         $apcu_time = $type == 'url' ? 600 : 36000;
-        $apcu_type_key = $server . $type . $id;
+        // 包含音质参数在缓存键中，实现不同音质的独立缓存
+        $apcu_type_key = $server . $type . $id . '_br' . $br;
         if (apcu_exists($apcu_type_key)) {
             $data = apcu_fetch($apcu_type_key);
             return_data($type, $data);
         }
         if ($need_song) {
+            // song数据不依赖音质，可以共享缓存
             $apcu_song_id_key = $server . 'song_id' . $id;
             if (apcu_exists($apcu_song_id_key)) {
                 $song = apcu_fetch($apcu_song_id_key);
