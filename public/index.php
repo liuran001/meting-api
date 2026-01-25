@@ -377,10 +377,6 @@
                             <input id="picsize" class="input" name="picsize" placeholder="纯数字，例如 300" />
                         </div>
                         <div class="field">
-                            <label class="label" for="p">封面裁剪 p（仅 pic，可选，格式 xxyxx）</label>
-                            <input id="p" class="input" name="p" placeholder="例如 128y128" />
-                        </div>
-                        <div class="field">
                             <label class="label" for="br">最高音质 br（仅 song，仅网易云有效）</label>
                             <input id="br" class="input" name="br" placeholder="纯数字，例如 1411" />
                         </div>
@@ -438,9 +434,6 @@
                     </div>
                     <div class="section">
                         <div class="label">picsize：歌曲封面大小（仅使用封面功能时 可选 携带，指定纯数字）</div>
-                    </div>
-                    <div class="section">
-                        <div class="label">p：封面裁剪参数（仅 pic，可选，格式 xxyxx，如 128y128）</div>
                     </div>
                     <div class="section">
                         <div class="label">keyword：搜索关键词（仅使用搜索功能时携带）</div>
@@ -708,7 +701,6 @@
                     id: document.getElementById('id').value,
                     keyword: document.getElementById('keyword').value,
                     picsize: document.getElementById('picsize').value,
-                    p: document.getElementById('p').value,
                     br: document.getElementById('br').value,
                     yrc: document.getElementById('yrc').value,
                     handsome: document.getElementById('handsome').value,

@@ -38,7 +38,6 @@ if (defined('HANDSOME_MODE') && HANDSOME_MODE === true) {
     $handsome = strtolower(trim($handsome)) === 'true' ? 'true' : 'false';
 }
 $picsize = filter_input(INPUT_GET, 'picsize', FILTER_SANITIZE_SPECIAL_CHARS) ?: null;
-$pic_param = filter_input(INPUT_GET, 'p', FILTER_SANITIZE_SPECIAL_CHARS) ?: null;
 
 
 if (AUTH) {
@@ -297,19 +296,12 @@ if ($type == 'playlist') {
         } else if ($type == 'url') {
             // url缓存需要包含音质参数
             $apcu_type_key = $server . $type . $id . '_br' . $br;
-        } else if ($type == 'pic') {
-            // pic 缓存仅区分封面尺寸，p 仅影响返回时的 param 拼接
-            $pic_cache_suffix = '_picsize' . ($picsize === null ? 'default' : $picsize);
-            $apcu_type_key = $server . $type . $id . $pic_cache_suffix;
         } else {
-            // 其他类型（name, artist等）不受br和dwrc影响
+            // 其他类型（pic, name, artist等）不受br和dwrc影响
             $apcu_type_key = $server . $type . $id;
         }
         if (apcu_exists($apcu_type_key)) {
             $data = apcu_fetch($apcu_type_key);
-            if ($type == 'pic') {
-                $data = append_pic_param($data, $pic_param);
-            }
             return_data($type, $data);
         }
         if ($need_song) {
@@ -322,7 +314,7 @@ if ($type == 'playlist') {
     }
 
     if (!$need_song) {
-        $data = song2data($api, null, $type, $id, $dwrc, $picsize, $pic_param, $br, $handsome);
+        $data = song2data($api, null, $type, $id, $dwrc, $picsize, $br, $handsome);
     } else {
         if (!isset($song)) $song = $api->song($id);
         if ($song == '[]') {
@@ -332,15 +324,13 @@ if ($type == 'playlist') {
         if (APCU_CACHE) {
             apcu_store($apcu_song_id_key, $song, $apcu_time);
         }
-        $data = song2data($api, json_decode($song)[0], $type, $id, $dwrc, $picsize, $pic_param, $br, $handsome);
+        $data = song2data($api, json_decode($song)[0], $type, $id, $dwrc, $picsize, $br, $handsome);
     }
 
     if (APCU_CACHE) {
         apcu_store($apcu_type_key, $data, $apcu_time);
     }
-    if ($type == 'pic') {
-        $data = append_pic_param($data, $pic_param);
-    }
+
     return_data($type, $data);
 }
 
@@ -382,7 +372,7 @@ function auth($name)
     return hash_hmac('sha1', $name, AUTH_SECRET);
 }
 
-function song2data($api, $song, $type, $id, $dwrc, $picsize, $pic_param, $br, $handsome = 'false')
+function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'false')
 {
     $data = '';
     switch ($type) {
@@ -484,14 +474,4 @@ function return_data($type, $data)
         echo $data;
     }
     exit;
-}
-
-function append_pic_param($url, $pic_param)
-{
-    $pic_param = $pic_param === null ? '' : trim($pic_param);
-    if ($url === '' || $pic_param === '') {
-        return $url;
-    }
-    $separator = strpos($url, '?') === false ? '?' : '&';
-    return $url . $separator . 'param=' . rawurlencode($pic_param);
 }
