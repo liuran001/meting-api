@@ -663,7 +663,7 @@
             const oldText = countEl.textContent;
             try {
                 countEl.textContent = '···';
-                const r = await fetch('/query.php?type=total');
+                const r = await fetch('/meting/query.php?type=total');
                 countEl.textContent = await r.text();
             } catch (e) {
                 countEl.textContent = oldText;
