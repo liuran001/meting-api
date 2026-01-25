@@ -296,6 +296,10 @@ if ($type == 'playlist') {
         } else if ($type == 'url') {
             // url缓存需要包含音质参数
             $apcu_type_key = $server . $type . $id . '_br' . $br;
+        } else if ($type == 'pic') {
+            // 图片缓存按尺寸区分；无尺寸请求缓存为 default
+            $size_key = ($picsize !== null && $picsize !== '') ? $picsize : 'default';
+            $apcu_type_key = $server . $type . $id . '_size' . $size_key;
         } else {
             // 其他类型（pic, name, artist等）不受br和dwrc影响
             $apcu_type_key = $server . $type . $id;
@@ -328,6 +332,7 @@ if ($type == 'playlist') {
     }
 
     if (APCU_CACHE) {
+        // 所有类型均写入缓存；pic 类型按尺寸独立缓存
         apcu_store($apcu_type_key, $data, $apcu_time);
     }
 
