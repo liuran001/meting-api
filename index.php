@@ -618,7 +618,7 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
                                 $should_output = true;
 
                                 // Check metadata
-                                if (preg_match('/(作词|作曲|制作人)/', $content)) {
+                                if (preg_match('/(作词|作曲|制作人|编曲)/', $content)) {
                                     $conflict = false;
                                     $next_key = null;
                                     
