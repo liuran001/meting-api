@@ -494,8 +494,7 @@
                         <div class="field">
                             <label class="label" for="lrctype">歌词格式 lrctype</label>
                             <select id="lrctype" name="lrctype">
-                                <option value="" selected>默认（原词（翻译））</option>
-                                <option value="0">0（仅原词）</option>
+                                <option value="" selected>默认仅原词</option>
                                 <option value="1">1（原词 + 翻译 SPL）</option>
                                 <option value="2">2（仅翻译）</option>
                             </select>
@@ -625,7 +624,7 @@
                             </div>
                             <div class="param-desc">歌词翻译格式控制。</div>
                             <div class="param-sub">
-                                <div><span class="param-val">0</span> <span>原词</span></div>
+                                <div><span class="param-val">0</span> <span>原词（默认）</span></div>
                                 <div><span class="param-val">1</span> <span>原词 + 翻译 (SPL)</span></div>
                                 <div><span class="param-val">2</span> <span>仅翻译</span></div>
                             </div>
