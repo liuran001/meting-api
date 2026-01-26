@@ -487,14 +487,14 @@
                             <label class="label" for="yrc">逐字歌词 yrc</label>
                             <select id="yrc" name="yrc">
                                 <option value="false" selected>False（默认禁用）</option>
-                                <option value="true">True（启用）</option>
+                                <option value="true">True（启用，支持 SPL 逐字歌词）</option>
                                 <option value="open">Open（备用启用模式）</option>
                             </select>
                         </div>
                         <div class="field">
                             <label class="label" for="lrctype">歌词格式 lrctype</label>
                             <select id="lrctype" name="lrctype">
-                                <option value="" selected>默认（原词/括号）</option>
+                                <option value="" selected>默认（原词（翻译））</option>
                                 <option value="0">0（仅原词）</option>
                                 <option value="1">1（原词 + 翻译 SPL）</option>
                                 <option value="2">2（仅翻译）</option>

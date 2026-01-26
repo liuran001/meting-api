@@ -798,8 +798,15 @@ class Meting
             $result = json_decode($result, true);
         }
 
+        $lyric = isset($result['yrc']['lyric']) ? $result['yrc']['lyric'] : '';
+        
+        // 简单的检查是否为 YRC 格式
+        if ($lyric && preg_match('/^\[\d+,\d+\]/', $lyric)) {
+            $lyric = $this->yrcToVerbatim($lyric);
+        }
+
         $data = array(
-            'lyric'  => isset($result['yrc']['lyric']) ? $result['yrc']['lyric'] : '',
+            'lyric'  => $lyric,
             'tlyric' => isset($result['none']['lyric']) ? $result['none']['lyric'] : '',
         );
 
@@ -895,5 +902,77 @@ class Meting
         }
 
         return $result;
+    }
+
+    private function yrcToVerbatim($lyric)
+    {
+        $lines = preg_split('/\\\\n|\n|\r\n|\r/', $lyric);
+        $result = [];
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line)) continue;
+
+            // Parse line header [start, duration]
+            if (!preg_match('/^\[(\d+),(\d+)\]/', $line, $matches)) {
+                // Not a YRC line, check if it's metadata or standard lrc
+                // For now, if we are parsing YRC, we might want to keep other lines or ignore?
+                // If the whole file is YRC, metadata also has [d,d] usually.
+                // If it's a mix or invalid, let's keep it as is?
+                // Or if we return mixed content it might break players expecting strict format.
+                // But the user example shows strict YRC.
+                // Let's assume if it doesn't match, we append it (e.g. metadata without timestamps if any?)
+                // Actually user example: [0,1000](0,1000,0) Metadata
+                // So metadata is also timestamped.
+                // If strict YRC, maybe ignore lines that don't match?
+                // Let's keep lines that don't match for safety? No, that might produce garbage.
+                // Let's skip.
+                if (preg_match('/^\[.*?\]/', $line)) {
+                    // It looks like a tag but not [d,d]. Maybe [ti:title]?
+                    // Standard LRC tags. Keep them.
+                    $result[] = $line;
+                }
+                continue;
+            }
+
+            $lineStart = intval($matches[1]);
+            $lineDuration = intval($matches[2]);
+            $lineEnd = $lineStart + $lineDuration;
+
+            $content = substr($line, strlen($matches[0]));
+
+            if (preg_match_all('/\((\d+),(\d+),(\d+)\)(.*?)(?=\(\d+,\d+,\d+\)|$)/', $content, $wordMatches, PREG_SET_ORDER)) {
+                $newLine = "";
+                $lastWordEnd = 0;
+                
+                foreach ($wordMatches as $wm) {
+                    $start = intval($wm[1]);
+                    $duration = intval($wm[2]);
+                    $text = $wm[4];
+
+                    $formattedStart = $this->formatTime($start);
+                    $newLine .= $formattedStart . $text;
+                    $lastWordEnd = $start + $duration;
+                }
+                $newLine .= $this->formatTime($lastWordEnd);
+                $result[] = $newLine;
+            } else {
+                // Fallback for lines without word timestamps
+                $result[] = $this->formatTime($lineStart) . $content . $this->formatTime($lineEnd);
+            }
+        }
+
+        return implode("\n", $result);
+    }
+
+    private function formatTime($ms)
+    {
+        $seconds = floor($ms / 1000);
+        $milliseconds = $ms % 1000;
+        $minutes = floor($seconds / 60);
+        $seconds = $seconds % 60;
+        $cs = floor($milliseconds / 10);
+        
+        return sprintf("[%02d:%02d.%02d]", $minutes, $seconds, $cs);
     }
 }

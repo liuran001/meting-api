@@ -579,7 +579,7 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
 
         case 'lrc':
             $lrc_data = json_decode($api->lyric($id));
-            if ($lrc_data->lyric == '') {
+            if (empty($lrc_data) || $lrc_data->lyric == '') {
                 $lrc = '';
             } else if ($lrc_data->tlyric == '') {
                 $lrc = $lrc_data->lyric;
@@ -640,7 +640,7 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
                 $lrc = $lrc_data->lyric;
             }
             // 移除时间戳后面紧跟的空格
-            $lrc = preg_replace('/(\[[0-9:.]+\])\s+/', '$1', $lrc);
+            $lrc = preg_replace('/(\[[0-9:.]+\])[ \t]+/', '$1', $lrc);
             $data = $lrc;
             break;
 
