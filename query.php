@@ -65,6 +65,29 @@ if ($type === 'total') {
         echo "0";
     }
     exit;
+} elseif ($type === 'clean_cache') {
+    // 清空缓存（需要权限验证）
+    if ($key !== $secret) {
+        http_response_code(403);
+        echo "Forbidden";
+        exit;
+    }
+    
+    $msg = [];
+    
+    // 1. 清空 APCu
+    if (function_exists('apcu_clear_cache')) {
+        if (apcu_clear_cache()) {
+            $msg[] = "APCu cache cleared.";
+        } else {
+            $msg[] = "Failed to clear APCu cache.";
+        }
+    } else {
+        $msg[] = "APCu extension not loaded.";
+    }
+    
+    echo implode("\n", $msg);
+    exit;
 }
 
 // 自定义SQL查询（需要权限验证）
