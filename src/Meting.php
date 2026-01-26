@@ -336,6 +336,9 @@ class Meting
                     "encode" => "netease_AESCBC",
                 ];
                 $playlistData = json_decode($this->exec($api), true);
+                if (!isset($playlistData["playlist"]["trackIds"])) {
+                    return json_encode([]);
+                }
                 $trackIds = $playlistData["playlist"]["trackIds"];
                 $allTracks = [];
                 $idBatches = array_chunk(array_column($trackIds, "id"), 500);

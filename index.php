@@ -207,7 +207,7 @@ if ($type == 'playlist') {
 
     $data = $api->playlist($id);
     if ($data == '[]') {
-        echo '{"error":"id 为空，无法处理"}';
+        echo '{"error":"歌单不存在或为空"}';
         exit;
     }
     $data = json_decode($data);

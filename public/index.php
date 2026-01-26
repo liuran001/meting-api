@@ -607,7 +607,10 @@
                                 <span class="param-key">yrc</span>
                                 <span class="param-name">逐字歌词</span>
                             </div>
-                            <div class="param-desc">网易云音乐逐字歌词解析开关。</div>
+                            <div class="param-desc">
+                                网易云音乐逐字歌词解析开关。<br/>
+                                返回格式为 <a href="https://moriafly.com/standards/spl.html" target="_blank" style="color: var(--md-primary); text-decoration: none; font-weight: 500;">SPL (Salt Player Lyrics)</a>，基于且兼容（增强型）LRC，一种阅读友好的歌词格式。
+                            </div>
                             <div class="param-sub">
                                 <div><span class="param-val">false</span> <span>禁用（默认）</span></div>
                                 <div><span class="param-val">true</span> <span>启用（优先解析逐字歌词）</span></div>
