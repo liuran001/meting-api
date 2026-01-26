@@ -42,14 +42,17 @@
         html, body { height: 100%; }
         body {
             margin: 0;
+            padding-top: 64px; /* 为固定顶栏留出空间 */
             font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "PingFang SC", "Microsoft Yahei", sans-serif;
             background: var(--md-surface);
             color: var(--md-on-surface);
         }
         .app-bar {
-            position: sticky;
+            position: fixed;
             top: 0;
-            z-index: 10;
+            left: 0;
+            width: 100%;
+            z-index: 100;
             background: var(--md-primary);
             color: var(--md-on-primary);
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
@@ -63,6 +66,19 @@
             padding: 14px 16px;
             font-size: 20px;
             font-weight: 600;
+        }
+        .back-to-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            padding: 4px 8px;
+            margin-left: -8px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+        .back-to-top:hover {
+            background: rgba(255,255,255,0.1);
         }
         .app-bar .spacer { flex: 1; }
         .stats-badge {
@@ -135,11 +151,20 @@
             gap: 24px;
         }
         @media (min-width: 900px) {
-            .grid { grid-template-columns: 1.2fr 1fr; }
+            .grid { grid-template-columns: 1fr 1fr; }
         }
         .aplayer-wrap { display: flex; justify-content: center; }
         #aplayer { width: 100%; max-width: 900px; }
+        .card-content-player {
+            max-height: 450px;
+            overflow-y: auto;
+        }
+        @media (min-width: 900px) {
+            .test-card { grid-column: 2; grid-row: 1; }
+            .param-card { grid-column: 1; grid-row: 1; }
+        }
         /* APlayer 深色模式适配 */
+
         :root[data-theme="dark"] .aplayer {
             background: #2B2930;
         }
@@ -289,14 +314,83 @@
             overflow-wrap: break-word;
         }
         :root[data-theme="dark"] .handsome-code { background: #2B2930 !important; color: #E6E1E5; border: 1px solid #49454F; }
+        
+        /* 参数说明列表样式 */
+        .param-grid {
+            display: grid;
+            gap: 12px;
+        }
+        .param-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 12px;
+            background: rgba(0,0,0,0.02);
+            border-radius: 12px;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+        :root[data-theme="dark"] .param-item {
+            background: rgba(255,255,255,0.03);
+        }
+        .param-item:hover {
+            background: rgba(0,0,0,0.04);
+            border-color: var(--md-surface-variant);
+        }
+        :root[data-theme="dark"] .param-item:hover {
+            background: rgba(255,255,255,0.06);
+        }
+        .param-header {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .param-key {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            color: var(--md-primary);
+            font-weight: 700;
+            font-size: 15px;
+            background: var(--md-surface-variant);
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+        :root[data-theme="dark"] .param-key {
+            background: rgba(208, 188, 255, 0.2);
+            color: #EADDFF;
+        }
+        .param-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .param-desc {
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--md-on-surface);
+            margin-left: 4px;
+        }
+        .param-sub {
+            margin-top: 2px;
+            padding-left: 12px;
+            border-left: 2px solid var(--md-surface-variant);
+            font-size: 13px;
+            color: #555;
+            display: grid;
+            gap: 4px;
+        }
+        :root[data-theme="dark"] .param-sub { color: #bbb; border-left-color: #49454F; }
+        .param-sub div { display: flex; gap: 6px; }
+        .param-val { font-weight: 600; min-width: 40px; color: var(--md-on-surface); }
     </style>
 </head>
 
 <body>
     <header class="app-bar">
         <div class="title">
-            <span class="material-symbols-outlined" aria-hidden="true">library_music</span>
-            Meting-API
+            <div class="back-to-top" id="backToTop" title="回到顶部">
+                <span class="material-symbols-outlined" aria-hidden="true">library_music</span>
+                Meting-API
+            </div>
             <span class="spacer"></span>
             <button id="statsRefresh" class="stats-badge" style="border: none; color: inherit;" aria-label="刷新统计数据" title="点击刷新">
                 <span class="material-symbols-outlined" style="font-size: 18px;" aria-hidden="true">query_stats</span>
@@ -312,41 +406,44 @@
 
     <main class="container">
 
-        <!-- 免责声明 -->
-        <section class="section card">
-            <div class="card-header">⚠️ 使用须知</div>
-            <div class="card-content">
-                <p style="margin: 0 0 12px 0; line-height: 1.6;">
-                    本接口<strong>仅供学习交流使用</strong>，所有音乐数据均来自第三方平台（网易云音乐、QQ音乐等），<strong>不在本服务器存储任何音频文件</strong>。请在获取后 24 小时内删除，切勿用于商业或违法用途。
-                </p>
-                <p style="margin: 0 0 12px 0; line-height: 1.6;">
-                    使用本接口即表示您已知晓并同意：本人<strong>不对因使用本接口产生的任何后果承担责任</strong>，包括但不限于版权纠纷、法律责任等。请遵守当地法律法规及音乐平台的用户协议。
-                </p>
-                <p style="margin: 0; line-height: 1.6; color: var(--md-outline);">
-                    如有异议请联系：<span id="email-placeholder">（加载中...）</span>
-                </p>
-                <p style="margin: 0; line-height: 1.6; color: var(--md-outline);">
-                    疑问及使用咨询：<a href="https://t.me/BDovo" style="color: var(--md-primary); text-decoration: none; font-weight: 500;" target="_blank" rel="noopener noreferrer">Telegram@BDovo</a>
-                </p>
-                <p style="margin: 12px 0 0 0; line-height: 1.6; font-weight: 6;">
-                    注意：QQ音乐未经过测试，目前可能仅网易云解析可用
-                </p>
-                <p style="margin: 8px 0 0 0; line-height: 1.6; font-size: 14px; color: var(--md-outline);">
-                    限流规则：针对回源请求（未命中缓存）进行 IP 限流（默认 90次/30秒）。超限将返回 HTTP 429 错误：<code style="background: var(--md-surface-variant); padding: 2px 4px; border-radius: 4px;">{"error":"rate limit exceeded"}</code>
-                </p>
+        <!-- 上部：使用须知 + 播放器 -->
+        <section class="section grid">
+            <!-- 免责声明 -->
+            <div class="card">
+                <div class="card-header">使用须知</div>
+                <div class="card-content">
+                    <p style="margin: 0 0 12px 0; line-height: 1.6;">
+                        本接口<strong>仅供学习交流使用</strong>，所有音乐数据均来自第三方平台（网易云音乐、QQ音乐等），<strong>不在本服务器存储任何音频文件</strong>。请在获取后 24 小时内删除，切勿用于商业或违法用途。
+                    </p>
+                    <p style="margin: 0 0 12px 0; line-height: 1.6;">
+                        使用本接口即表示您已知晓并同意：本人<strong>不对因使用本接口产生的任何后果承担责任</strong>，包括但不限于版权纠纷、法律责任等。请遵守当地法律法规及音乐平台的用户协议。
+                    </p>
+                    <p style="margin: 0; line-height: 1.6; color: var(--md-outline);">
+                        如有异议请联系：<span id="email-placeholder">（加载中...）</span>
+                    </p>
+                    <p style="margin: 0; line-height: 1.6; color: var(--md-outline);">
+                        疑问及使用咨询：<a href="https://t.me/BDovo" style="color: var(--md-primary); text-decoration: none; font-weight: 500;" target="_blank" rel="noopener noreferrer">Telegram@BDovo</a>
+                    </p>
+                    <p style="margin: 12px 0 0 0; line-height: 1.6; font-weight: 6;">
+                        注意：QQ音乐未经过测试，目前可能仅网易云解析可用
+                    </p>
+                    <p style="margin: 8px 0 0 0; line-height: 1.6; font-size: 14px; color: var(--md-outline);">
+                        限流规则：针对回源请求（未命中缓存）进行 IP 限流（默认 90次/30秒）。超限将返回 HTTP 429 错误：<code style="background: var(--md-surface-variant); padding: 2px 4px; border-radius: 4px;">{"error":"rate limit exceeded"}</code>
+                    </p>
+                </div>
             </div>
-        </section>
 
-        <section class="section card">
-            <div class="card-header">播放器</div>
-            <div class="card-content">
-                <div class="aplayer-wrap"><div id="aplayer"></div></div>
+            <div class="card">
+                <div class="card-header">播放器</div>
+                <div class="card-content card-content-player">
+                    <div class="aplayer-wrap"><div id="aplayer"></div></div>
+                </div>
             </div>
         </section>
 
         <section class="section grid">
             <!-- 接口测试 -->
-            <div class="card">
+            <div class="card test-card">
                 <div class="card-header">接口测试</div>
                 <div class="card-content">
                     <form id="testForm">
@@ -421,78 +518,161 @@
                 </div>
             </div>
 
-            <!-- 参数说明（保留所有内容） -->
-            <div class="card">
+            <!-- 参数说明 -->
+            <div class="card param-card">
                 <div class="card-header">参数说明</div>
                 <div class="card-content">
-                    <div class="section">
-                        <div class="label">server：数据源</div>
-                        <div>• netease 网易云音乐（默认）</div>
-                        <div>• tencent QQ音乐</div>
-                    </div>
-                    <div class="section">
-                        <div class="label">type：类型</div>
-                        <div>• name 歌曲名</div>
-                        <div>• artist 歌手</div>
-                        <div>• url 链接</div>
-                        <div>• pic 封面</div>
-                        <div>• lrc 歌词</div>
-                        <div>• song 单曲</div>
-                        <div>• playlist 歌单</div>
-                        <div>• search 搜索</div>
-                    </div>
-                    <div class="section">
-                        <div class="label">id：类型ID（封面ID/单曲ID/歌单ID）</div>
-                        <div>（id 必须指定，在使用其它功能比如搜索时，请将 id 指定为 0）</div>
-                    </div>
-                    <div class="section">
-                        <div class="label">picsize：歌曲封面大小（仅使用封面功能时 可选 携带，指定纯数字）</div>
-                    </div>
-                    <div class="section">
-                        <div class="label">keyword：搜索关键词（仅使用搜索功能时携带）</div>
-                    </div>
-                    <div class="section">
-                        <div class="label">br：歌曲最高音质（仅使用单曲功能时 可选 携带，目前仅网易云有效，指定纯数字，128标准(MP3) 320极高(MP3) 380无损(Flac) 400Hi-Res(Flac)）</div>
-                    </div>
-                    <div class="section">
-                        <div class="label">yrc：网易云音乐逐字歌词解析开关，开启后优先解析逐字歌词</div>
-                        <div>• False 禁用（默认）</div>
-                        <div>• True 启用</div>
-                        <div>• Open 备用启用模式（该模式在没有逐字歌词时不会返回逐行歌词，而是返回空）</div>
-                    </div>
-                    <div class="section">
-                        <div class="label">handsome：Handsome 主题兼容模式（可选）</div>
-                        <div>• true 启用（song 和 playlist 返回 cover 字段而非 pic）</div>
-                    </div>
-                    <div class="section">
-                        <div class="label">refresh：强制刷新缓存（可选）</div>
-                        <div>• true 强制刷新（忽略缓存并尝试从上游获取最新数据）。<b>注意：</b>相同资源在 60 秒内仅允许强制刷新一次，超出频率将被忽略。</div>
-                    </div>
-                    <div class="section">
-                        <div class="label">img_redirect：强制图片重定向（可选）</div>
-                        <div>• true 启用（song/playlist/search 结果中的图片链接将直接指向源站图片，而不经过本服务器中转）</div>
-                        <div>• false 禁用（默认，返回本服务器的中转链接）</div>
-                    </div>
+                    <div class="param-grid">
+                        
+                        <div class="param-item">
+                            <div class="param-header">
+                                <span class="param-key">server</span>
+                                <span class="param-name">数据源</span>
+                            </div>
+                            <div class="param-sub">
+                                <div><span class="param-val">netease</span> <span>网易云音乐（默认）</span></div>
+                                <div><span class="param-val">tencent</span> <span>QQ音乐</span></div>
+                            </div>
+                        </div>
 
-                    <div class="section">
-                        <div class="note">⚠️ Handsome 主题用户请注意</div>
-                        <div>由于 Handsome 使用的并非标准的 Meting API 接口，需要进行特殊处理。请在 Handsome 主题的<b>开发者高级设置</b>中填写以下内容：</div>
-                        <code class="mono handsome-code" style="display:block; padding:10px; background:#FAFAFA; border-radius:8px; margin-top:8px;">
+                        <div class="param-item">
+                            <div class="param-header">
+                                <span class="param-key">type</span>
+                                <span class="param-name">类型</span>
+                            </div>
+                            <div class="param-sub">
+                                <div><span class="param-val">name</span> <span>歌曲名</span></div>
+                                <div><span class="param-val">artist</span> <span>歌手</span></div>
+                                <div><span class="param-val">url</span> <span>音频链接</span></div>
+                                <div><span class="param-val">pic</span> <span>封面链接</span></div>
+                                <div><span class="param-val">lrc</span> <span>歌词</span></div>
+                                <div><span class="param-val">song</span> <span>单曲信息（JSON）</span></div>
+                                <div><span class="param-val">playlist</span> <span>歌单信息（JSON）</span></div>
+                                <div><span class="param-val">search</span> <span>搜索结果（JSON）</span></div>
+                            </div>
+                        </div>
+
+                        <div class="param-item">
+                            <div class="param-header">
+                                <span class="param-key">id</span>
+                                <span class="param-name">资源ID</span>
+                            </div>
+                            <div class="param-desc">
+                                对应封面 ID、单曲 ID 或歌单 ID。<br/>
+                                <span style="opacity: 0.7;">（必填，若使用 search 功能请填 0）</span>
+                            </div>
+                        </div>
+
+                        <div class="param-item">
+                            <div class="param-header">
+                                <span class="param-key">keyword</span>
+                                <span class="param-name">搜索关键词</span>
+                            </div>
+                            <div class="param-desc">仅在 type=search 时需要。</div>
+                        </div>
+
+                        <div class="param-item">
+                            <div class="param-header">
+                                <span class="param-key">picsize</span>
+                                <span class="param-name">封面大小</span>
+                            </div>
+                            <div class="param-desc">仅在 type=pic 时可选。填入纯数字，例如 300。</div>
+                        </div>
+
+                        <div class="param-item">
+                            <div class="param-header">
+                                <span class="param-key">br</span>
+                                <span class="param-name">比特率/音质</span>
+                            </div>
+                            <div class="param-desc">仅在 type=song/url 时可选（目前仅网易云有效）。</div>
+                            <div class="param-sub">
+                                <div><span class="param-val">128</span> <span>标准音质 (MP3)</span></div>
+                                <div><span class="param-val">320</span> <span>极高音质 (MP3)</span></div>
+                                <div><span class="param-val">380</span> <span>无损音质 (Flac)</span></div>
+                                <div><span class="param-val">400</span> <span>Hi-Res (Flac)</span></div>
+                            </div>
+                        </div>
+
+                        <div class="param-item">
+                            <div class="param-header">
+                                <span class="param-key">yrc</span>
+                                <span class="param-name">逐字歌词</span>
+                            </div>
+                            <div class="param-desc">网易云音乐逐字歌词解析开关。</div>
+                            <div class="param-sub">
+                                <div><span class="param-val">false</span> <span>禁用（默认）</span></div>
+                                <div><span class="param-val">true</span> <span>启用（优先解析逐字歌词）</span></div>
+                                <div><span class="param-val">open</span> <span>备用模式（无逐字歌词时不返回普通歌词）</span></div>
+                            </div>
+                        </div>
+
+                        <div class="param-item">
+                            <div class="param-header">
+                                <span class="param-key">handsome</span>
+                                <span class="param-name">Handsome 兼容</span>
+                            </div>
+                            <div class="param-desc">Handsome 主题专用格式兼容。</div>
+                            <div class="param-sub">
+                                <div><span class="param-val">true</span> <span>启用（返回 cover 字段而非 pic）</span></div>
+                            </div>
+                        </div>
+                        
+                        <div class="param-item">
+                            <div class="param-header">
+                                <span class="param-key">refresh</span>
+                                <span class="param-name">强制刷新</span>
+                            </div>
+                            <div class="param-desc">忽略缓存并尝试从上游获取最新数据。</div>
+                            <div class="param-sub">
+                                <div><span class="param-val">true</span> <span>启用（相同资源 60秒 内仅限一次）</span></div>
+                            </div>
+                        </div>
+
+                        <div class="param-item">
+                            <div class="param-header">
+                                <span class="param-key">img_redirect</span>
+                                <span class="param-name">图片重定向</span>
+                            </div>
+                            <div class="param-desc">控制 JSON 结果中的图片链接格式。</div>
+                            <div class="param-sub">
+                                <div><span class="param-val">false</span> <span>禁用（默认，返回本站中转链接）</span></div>
+                                <div><span class="param-val">true</span> <span>启用（直接返回源站图片链接）</span></div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 底部说明与示例 -->
+        <section class="section card"> 
+            <div class="card-header">注意事项与示例</div>
+            <div class="card-content">
+                <div class="grid">
+                    <div>
+                        <div class="note" style="margin-bottom: 8px;">⚠️ Handsome 主题用户请注意</div>
+                        <div style="font-size: 14px; line-height: 1.6; color: var(--md-on-surface);">
+                            由于 Handsome 使用的并非标准的 Meting API 接口，需要进行特殊处理。请在 Handsome 主题的<b>开发者高级设置</b>中填写以下内容：
+                        </div>
+                        <code class="mono handsome-code" style="display:block; padding:12px; background:#FAFAFA; border-radius:8px; margin-top:8px; font-size: 13px;">
                             {"music_api":"<?php echo API_URI ?>?server=:server&type=:type&id=:id&handsome=true"}
                         </code>
                     </div>
 
-                    <div class="section example-list">
-                        <div class="label">示例</div>
-                        <a href="<?php echo API_URI ?>?server=netease&type=url&id=1969519579" target="_blank"><?php echo API_URI ?>?server=netease&type=url&id=1969519579</a><br />
-                        <a href="<?php echo API_URI ?>?server=netease&type=song&id=1969519579" target="_blank"><?php echo API_URI ?>?server=netease&type=song&id=1969519579</a><br />
-                        <a href="<?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&yrc=true" target="_blank"><?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&yrc=true</a><br />
-                        <a href="<?php echo API_URI ?>?server=netease&type=search&id=0&yrc=true&keyword=寄往未来的信" target="_blank"><?php echo API_URI ?>?server=netease&type=search&id=0&yrc=true&keyword=寄往未来的信</a>
+                    <div>
+                        <div style="font-weight: 600; font-size: 15px; margin-bottom: 8px;">请求示例</div>
+                        <div class="example-list" style="font-size: 14px; line-height: 2;">
+                            <a href="<?php echo API_URI ?>?server=netease&type=url&id=1969519579" target="_blank"><?php echo API_URI ?>?server=netease&type=url&id=1969519579</a><br />
+                            <a href="<?php echo API_URI ?>?server=netease&type=song&id=1969519579" target="_blank"><?php echo API_URI ?>?server=netease&type=song&id=1969519579</a><br />
+                            <a href="<?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&yrc=true" target="_blank"><?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&yrc=true</a><br />
+                            <a href="<?php echo API_URI ?>?server=netease&type=search&id=0&yrc=true&keyword=寄往未来的信" target="_blank"><?php echo API_URI ?>?server=netease&type=search&id=0&yrc=true&keyword=寄往未来的信</a>
+                        </div>
                     </div>
-
-                    <div class="footer">
-                        GitHub：<a href="https://github.com/liuran001/meting-api" target="_blank">meting-api</a>，此 API 基于 <a href="https://github.com/metowolf/Meting" target="_blank">Meting</a> 构建。
-                    </div>
+                </div>
+                
+                <div class="footer" style="margin-top: 24px; padding-top: 16px; border-top: 1px dashed var(--md-surface-variant); text-align: center; font-size: 14px;">
+                    GitHub：<a href="https://github.com/liuran001/meting-api" target="_blank" style="color: var(--md-primary); text-decoration: none; font-weight: 500;">meting-api</a>，此 API 基于 <a href="https://github.com/metowolf/Meting" target="_blank" style="color: var(--md-primary); text-decoration: none; font-weight: 500;">Meting</a> 构建。
                 </div>
             </div>
         </section>
@@ -694,7 +874,17 @@
 
         window.addEventListener('DOMContentLoaded', async () => {
             initTheme();
+
+            // 点击标题回到顶部
+            const backToTop = document.getElementById('backToTop');
+            if (backToTop) {
+                backToTop.addEventListener('click', () => {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                });
+            }
+
             await initDefaultPlayer();
+
             // 设置当前年份
             document.getElementById('currentYear').textContent = new Date().getFullYear();
             // 统计次数
