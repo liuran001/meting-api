@@ -332,7 +332,7 @@
                     注意：QQ音乐未经过测试，目前可能仅网易云解析可用
                 </p>
                 <p style="margin: 8px 0 0 0; line-height: 1.6; font-size: 14px; color: var(--md-outline);">
-                    限流规则：针对回源请求（未命中缓存）进行 IP 限流（默认 60次/分钟）。超限将返回 HTTP 429 错误：<code style="background: var(--md-surface-variant); padding: 2px 4px; border-radius: 4px;">{"error":"rate limit exceeded"}</code>
+                    限流规则：针对回源请求（未命中缓存）进行 IP 限流（默认 90次/30秒）。超限将返回 HTTP 429 错误：<code style="background: var(--md-surface-variant); padding: 2px 4px; border-radius: 4px;">{"error":"rate limit exceeded"}</code>
                 </p>
             </div>
         </section>

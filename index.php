@@ -166,7 +166,7 @@ if ($yrc == 'true') {
 if ($type == 'playlist') {
 
     // 缓存键生成
-    $cache_key = $server . 'playlist' . $id . '_br' . $br;
+    $cache_key = $server . 'playlist' . $id . '_br' . $br . '_img' . $img_redirect;
 
     if (APCU_CACHE) {
         // 强制刷新频率限制 (60秒)
@@ -326,8 +326,11 @@ if ($type == 'playlist') {
             // 图片缓存按尺寸区分；无尺寸请求缓存为 default
             $size_key = ($picsize !== null && $picsize !== '') ? $picsize : 'default';
             $apcu_type_key = $server . $type . $id . '_size' . $size_key;
+        } else if ($type == 'song') {
+            // song 类型受 img_redirect 和 handsome 参数影响
+            $apcu_type_key = $server . $type . $id . '_img' . $img_redirect . '_handsome' . $handsome;
         } else {
-            // 其他类型（pic, name, artist等）不受br和dwrc影响
+            // 其他类型（name, artist等）
             $apcu_type_key = $server . $type . $id;
         }
 
