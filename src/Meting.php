@@ -945,7 +945,9 @@ class Meting
 
         $result = [];
 
-        foreach ($lines as $line) {
+        $count = count($lines);
+        for ($i = 0; $i < $count; $i++) {
+            $line = $lines[$i];
             $line = trim($line);
             if (empty($line)) continue;
 
@@ -1010,8 +1012,49 @@ class Meting
             }
             
             if ($bestMatchKey !== null) {
-                $result[] = $transMap[$bestMatchKey];
-                unset($transMap[$bestMatchKey]); // Remove used translation
+                $should_output = true;
+                $trans = $transMap[$bestMatchKey];
+
+                // Check metadata
+                if (preg_match('/(作词|作曲|制作人)/', $content)) {
+                    $conflict = false;
+                    $next_start = null;
+
+                    // Look ahead
+                    for ($j = $i + 1; $j < $count; $j++) {
+                        $next_line = trim($lines[$j]);
+                        if (empty($next_line)) continue;
+                        if (preg_match('/^\[(\d+),(\d+)\]/', $next_line, $next_matches)) {
+                            $next_start = intval($next_matches[1]);
+                            
+                            // Check if next line has a potential match in remaining map (excluding current)
+                            foreach ($transMap as $time => $txt) {
+                                if ($time == $bestMatchKey) continue;
+                                // If the "other" translation is basically the same time as OUR translation (which we are holding), it's not a conflict?
+                                // Wait, if time == bestMatchKey, we continued.
+                                // If time is different, but close to next_start.
+                                
+                                if (abs($time - $next_start) < 1500) {
+                                    $conflict = true;
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+
+                    if (!$conflict && $next_start !== null) {
+                        // Move translation to next line
+                        $transMap[$next_start] = $trans;
+                        unset($transMap[$bestMatchKey]);
+                        $should_output = false;
+                    }
+                }
+
+                if ($should_output) {
+                    $result[] = $trans;
+                    unset($transMap[$bestMatchKey]); // Remove used translation
+                }
             }
         }
 

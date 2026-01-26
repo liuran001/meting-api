@@ -601,14 +601,50 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
                         $lrc_cn_map[$line[0]] = $line[1];
                     }
                     $final_lrc = [];
-                    foreach ($lrc_arr as $v) {
+                    $lrc_count = count($lrc_arr);
+                    for ($i = 0; $i < $lrc_count; $i++) {
+                        $v = $lrc_arr[$i];
                         if ($v == '') continue;
+                        
                         $final_lrc[] = $v;
+                        
                         $parts = explode(']', $v, 2);
                         if (count($parts) >= 2) {
                             $key = $parts[0];
+                            $content = isset($parts[1]) ? $parts[1] : '';
+                            
                             if (isset($lrc_cn_map[$key]) && $lrc_cn_map[$key] != '//') {
-                                $final_lrc[] = $key . ']' . $lrc_cn_map[$key];
+                                $trans = $lrc_cn_map[$key];
+                                $should_output = true;
+
+                                // Check metadata
+                                if (preg_match('/(作词|作曲|制作人)/', $content)) {
+                                    $conflict = false;
+                                    $next_key = null;
+                                    
+                                    // Look ahead for next valid line
+                                    for ($j = $i + 1; $j < $lrc_count; $j++) {
+                                        if ($lrc_arr[$j] == '') continue;
+                                        $p2 = explode(']', $lrc_arr[$j], 2);
+                                        if (count($p2) >= 2) {
+                                            $next_key = $p2[0];
+                                            if ($next_key !== $key && isset($lrc_cn_map[$next_key]) && $lrc_cn_map[$next_key] != '//') {
+                                                $conflict = true;
+                                            }
+                                            break;
+                                        }
+                                    }
+                                    
+                                    if (!$conflict && $next_key) {
+                                        // No conflict, move translation to next line
+                                        $lrc_cn_map[$next_key] = $trans;
+                                        $should_output = false;
+                                    }
+                                }
+                                
+                                if ($should_output) {
+                                    $final_lrc[] = $key . ']' . $trans;
+                                }
                             }
                         }
                     }
