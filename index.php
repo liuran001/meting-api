@@ -38,6 +38,13 @@ if (defined('HANDSOME_MODE') && HANDSOME_MODE === true) {
     $handsome = strtolower(trim($handsome)) === 'true' ? 'true' : 'false';
 }
 $picsize = filter_input(INPUT_GET, 'picsize', FILTER_SANITIZE_SPECIAL_CHARS) ?: null;
+$refresh = isset($_GET['refresh']) && ($_GET['refresh'] === 'true' || $_GET['refresh'] === '1');
+$img_redirect = filter_input(INPUT_GET, 'img_redirect', FILTER_SANITIZE_SPECIAL_CHARS);
+if ($img_redirect === null || $img_redirect === '') {
+    $img_redirect = defined('FORCE_IMAGE_REDIRECT') && FORCE_IMAGE_REDIRECT ? 'true' : 'false';
+} else {
+    $img_redirect = strtolower(trim($img_redirect)) === 'true' ? 'true' : 'false';
+}
 
 
 if (AUTH) {
@@ -158,29 +165,43 @@ if ($yrc == 'true') {
 
 if ($type == 'playlist') {
 
-    if (CACHE) {
-        // 统一使用标准格式缓存，包含音质参数实现不同音质的独立缓存
-        $cache_key = $server . '_' . $id . '_br' . $br;
-        $file_path = $config['cache_dir'] . '/playlist/' . $cache_key . '.json';
-        if (file_exists($file_path)) {
-            if ($_SERVER['REQUEST_TIME'] - filemtime($file_path) < CACHE_TIME) {
-                $cached_data = file_get_contents($file_path);
-                // 如果是handsome模式，动态转换pic为cover
-                if ($handsome == 'true') {
-                    $playlist_array = json_decode($cached_data, true);
-                    foreach ($playlist_array as &$item) {
-                        if (isset($item['pic'])) {
-                            $item['cover'] = $item['pic'];
-                            unset($item['pic']);
-                        }
-                    }
-                    echo json_encode($playlist_array);
-                } else {
-                    echo $cached_data;
-                }
-                exit;
+    // 缓存键生成
+    $cache_key = $server . 'playlist' . $id . '_br' . $br;
+
+    if (APCU_CACHE) {
+        // 强制刷新频率限制 (60秒)
+        if ($refresh) {
+            $lock_key = 'refresh_lock_' . $cache_key;
+            if (apcu_exists($lock_key)) {
+                $refresh = false; // 忽略刷新
+            } else {
+                apcu_store($lock_key, 1, 60);
             }
         }
+
+        if (!$refresh && apcu_exists($cache_key)) {
+            $cached_data = apcu_fetch($cache_key);
+            // 如果是handsome模式，动态转换pic为cover
+            if ($handsome == 'true') {
+                $playlist_array = json_decode($cached_data, true);
+                foreach ($playlist_array as &$item) {
+                    if (isset($item['pic'])) {
+                        $item['cover'] = $item['pic'];
+                        unset($item['pic']);
+                    }
+                }
+                echo json_encode($playlist_array);
+            } else {
+                echo $cached_data;
+            }
+            exit;
+        }
+    }
+
+    if (!checkRateLimit($ip)) {
+        http_response_code(429);
+        echo '{"error":"rate limit exceeded"}';
+        exit;
     }
 
     $data = $api->playlist($id);
@@ -204,16 +225,15 @@ if ($type == 'playlist') {
             'name'   => $song->name,
             'artist' => implode('/', $song->artist),
             'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
-            'pic'    => API_URI . '?server=' . $song->source . '&type=pic&id=' . $song->pic_id . (AUTH ? '&auth=' . auth($song->source . 'pic' . $song->pic_id) : ''),
+            'pic'    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
             'lrc'    => $lrc_url
         );
     }
 
-    // 先保存标准格式的缓存
     $playlist_json = json_encode($playlist);
-    if (CACHE) {
-        // ! mkdir /cache/playlist
-        file_put_contents($file_path, $playlist_json);
+    
+    if (APCU_CACHE) {
+        apcu_store($cache_key, $playlist_json, PLAYLIST_CACHE_TIME);
     }
 
     // 如果是handsome模式，转换pic为cover后再输出
@@ -237,6 +257,12 @@ if ($type == 'playlist') {
         'page' => isset($_GET['page']) ? $_GET['page'] : 1,
         'limit' => isset($_GET['limit']) ? $_GET['limit'] : 50,
     );
+
+    if (!checkRateLimit($ip)) {
+        http_response_code(429);
+        echo '{"error":"rate limit exceeded"}';
+        exit;
+    }
 
     $data = $api->search($keyword, $option);
     $data_array = json_decode($data, true);
@@ -262,7 +288,7 @@ if ($type == 'playlist') {
             'artist' => implode('/', $song['artist']),
             'album'  => $song['album'],
             'url'    => API_URI . '?server=' . $song['source'] . '&type=url&id=' . $song['url_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'url' . $song['url_id']) : ''),
-            'pic'    => API_URI . '?server=' . $song['source'] . '&type=pic&id=' . $song['pic_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'pic' . $song['pic_id']) : ''),
+            'pic'    => get_pic_url($api, $song['source'], $song['pic_id'], $picsize, $img_redirect),
             'lrc'    => $lrc_url,
             'source' => $song['source']
         );
@@ -288,7 +314,7 @@ if ($type == 'playlist') {
     }
 
     if (APCU_CACHE) {
-        $apcu_time = $type == 'url' ? 600 : 36000;
+        $apcu_time = $type == 'url' ? URL_CACHE_TIME : CACHE_TIME;
         // 根据不同类型构建缓存键
         if ($type == 'lrc') {
             // 歌词缓存需要包含dwrc参数（yrc/qrc会被统一为dwrc）
@@ -304,21 +330,38 @@ if ($type == 'playlist') {
             // 其他类型（pic, name, artist等）不受br和dwrc影响
             $apcu_type_key = $server . $type . $id;
         }
-        if (apcu_exists($apcu_type_key)) {
+
+        // 强制刷新频率限制 (60秒)
+        if ($refresh) {
+            $lock_key = 'refresh_lock_' . $apcu_type_key;
+            if (apcu_exists($lock_key)) {
+                $refresh = false; // 忽略刷新
+            } else {
+                apcu_store($lock_key, 1, 60);
+            }
+        }
+
+        if (!$refresh && apcu_exists($apcu_type_key)) {
             $data = apcu_fetch($apcu_type_key);
             return_data($type, $data);
         }
         if ($need_song) {
             // song数据不依赖音质，可以共享缓存
             $apcu_song_id_key = $server . 'song_id' . $id;
-            if (apcu_exists($apcu_song_id_key)) {
+            if (!$refresh && apcu_exists($apcu_song_id_key)) {
                 $song = apcu_fetch($apcu_song_id_key);
             }
         }
     }
 
+    if (!checkRateLimit($ip)) {
+        http_response_code(429);
+        echo '{"error":"rate limit exceeded"}';
+        exit;
+    }
+
     if (!$need_song) {
-        $data = song2data($api, null, $type, $id, $dwrc, $picsize, $br, $handsome);
+        $data = song2data($api, null, $type, $id, $dwrc, $picsize, $br, $handsome, $img_redirect);
     } else {
         if (!isset($song)) $song = $api->song($id);
         if ($song == '[]') {
@@ -328,7 +371,7 @@ if ($type == 'playlist') {
         if (APCU_CACHE) {
             apcu_store($apcu_song_id_key, $song, $apcu_time);
         }
-        $data = song2data($api, json_decode($song)[0], $type, $id, $dwrc, $picsize, $br, $handsome);
+        $data = song2data($api, json_decode($song)[0], $type, $id, $dwrc, $picsize, $br, $handsome, $img_redirect);
     }
 
     if (APCU_CACHE) {
@@ -352,6 +395,17 @@ function api_uri() // static
 
 function getIP()
 {
+    // 优先检测配置的自定义 Header
+    if (defined('RATE_LIMIT_HEADER') && !empty(RATE_LIMIT_HEADER)) {
+        $header = RATE_LIMIT_HEADER;
+        if (isset($_SERVER[$header])) return $_SERVER[$header];
+        // 尝试自动补全 HTTP_ 前缀
+        if (strpos($header, 'HTTP_') !== 0) {
+            $header = 'HTTP_' . str_replace('-', '_', strtoupper($header));
+            if (isset($_SERVER[$header])) return $_SERVER[$header];
+        }
+    }
+
     if (getenv("HTTP_CLIENT_IP"))
         $ip = getenv("HTTP_CLIENT_IP");
     else if(getenv("HTTP_X_FORWARDED_FOR"))
@@ -377,7 +431,107 @@ function auth($name)
     return hash_hmac('sha1', $name, AUTH_SECRET);
 }
 
-function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'false')
+function get_pic_url($api, $source, $pic_id, $picsize, $img_redirect)
+{
+    if ($img_redirect === 'true') {
+        if ($source == 'netease') {
+            if (isset($picsize) && !empty($picsize)) {
+                return 'https://p3.music.126.net/' . $api->netease_encryptId($pic_id) . '/' . $pic_id . '.jpg?param=' . $picsize . 'x' . $picsize;
+            } else {
+                return 'https://p3.music.126.net/' . $api->netease_encryptId($pic_id) . '/' . $pic_id . '.jpg';
+            }
+        } elseif ($source == 'tencent') {
+            if (isset($picsize) && !empty($picsize)) {
+                return 'https://y.gtimg.cn/music/photo_new/T002R' . $picsize . 'x' . $picsize . 'M000' . $pic_id . '.jpg';
+            } else {
+                return 'https://y.gtimg.cn/music/photo_new/T002M000' . $pic_id . '.jpg';
+            }
+        }
+    }
+    
+    // Default to API proxy
+    return API_URI . '?server=' . $source . '&type=pic&id=' . $pic_id . (AUTH ? '&auth=' . auth($source . 'pic' . $pic_id) : '');
+}
+
+/**
+ * 检查 IP 限流
+ * @return bool true=通过, false=超限
+ */
+function checkRateLimit($ip)
+{
+    if (!defined('RATE_LIMIT_ENABLE') || !RATE_LIMIT_ENABLE) {
+        return true;
+    }
+
+    $window = defined('RATE_LIMIT_WINDOW') ? RATE_LIMIT_WINDOW : 60;
+    $limit = defined('RATE_LIMIT_COUNT') ? RATE_LIMIT_COUNT : 60;
+    
+    // 1. 优先使用 APCu
+    if (function_exists('apcu_enabled') && apcu_enabled()) {
+        $key = 'meting_rl_' . md5($ip);
+        if (!apcu_exists($key)) {
+            apcu_store($key, 1, $window);
+            return true;
+        } else {
+            $count = apcu_inc($key);
+            return $count <= $limit;
+        }
+    }
+
+    // 2. 降级使用文件缓存 (如果开启了文件缓存)
+    if (defined('CACHE') && CACHE) {
+        $dir = defined('CACHE_DIR') ? CACHE_DIR : __DIR__ . '/cache';
+        $rl_dir = $dir . '/ratelimit';
+        if (!is_dir($rl_dir)) {
+            if (!@mkdir($rl_dir, 0777, true)) return true; // 无法创建目录则跳过限流
+        }
+        
+        $file = $rl_dir . '/' . md5($ip) . '.json';
+        $current_time = time();
+        
+        // 简单的文件锁机制
+        $fp = @fopen($file, 'c+');
+        if (!$fp) return true;
+        
+        if (flock($fp, LOCK_EX)) {
+            $content = fread($fp, 1024);
+            $data = json_decode($content, true);
+            
+            if (!$data || $current_time - $data['start'] > $window) {
+                // 新窗口
+                $data = [
+                    'start' => $current_time,
+                    'count' => 1
+                ];
+                ftruncate($fp, 0);
+                rewind($fp);
+                fwrite($fp, json_encode($data));
+                flock($fp, LOCK_UN);
+                fclose($fp);
+                return true;
+            } else {
+                // 现有窗口
+                if ($data['count'] >= $limit) {
+                    flock($fp, LOCK_UN);
+                    fclose($fp);
+                    return false;
+                }
+                $data['count']++;
+                ftruncate($fp, 0);
+                rewind($fp);
+                fwrite($fp, json_encode($data));
+                flock($fp, LOCK_UN);
+                fclose($fp);
+                return true;
+            }
+        }
+        fclose($fp);
+    }
+
+    return true;
+}
+
+function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'false', $img_redirect = 'false')
 {
     $data = '';
     switch ($type) {
@@ -461,7 +615,7 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
                 'name'   => $song->name,
                 'artist' => implode('/', $song->artist),
                 'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
-                $pic_key    => API_URI . '?server=' . $song->source . '&type=pic&id=' . $song->pic_id . (AUTH ? '&auth=' . auth($song->source . 'pic' . $song->pic_id) : ''),
+                $pic_key    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
                 'lrc'    => $lrc_url
             )));
             break;

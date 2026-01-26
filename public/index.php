@@ -314,7 +314,7 @@
 
         <!-- 免责声明 -->
         <section class="section card">
-            <div class="card-header">⚠️ 免责声明</div>
+            <div class="card-header">⚠️ 使用须知</div>
             <div class="card-content">
                 <p style="margin: 0 0 12px 0; line-height: 1.6;">
                     本接口<strong>仅供学习交流使用</strong>，所有音乐数据均来自第三方平台（网易云音乐、QQ音乐等），<strong>不在本服务器存储任何音频文件</strong>。请在获取后 24 小时内删除，切勿用于商业或违法用途。
@@ -327,6 +327,12 @@
                 </p>
                 <p style="margin: 0; line-height: 1.6; color: var(--md-outline);">
                     疑问及使用咨询：<a href="https://t.me/BDovo" style="color: var(--md-primary); text-decoration: none; font-weight: 500;" target="_blank" rel="noopener noreferrer">Telegram@BDovo</a>
+                </p>
+                <p style="margin: 12px 0 0 0; line-height: 1.6; font-weight: 6;">
+                    注意：QQ音乐未经过测试，目前可能仅网易云解析可用
+                </p>
+                <p style="margin: 8px 0 0 0; line-height: 1.6; font-size: 14px; color: var(--md-outline);">
+                    限流规则：针对回源请求（未命中缓存）进行 IP 限流（默认 60次/分钟）。超限将返回 HTTP 429 错误：<code style="background: var(--md-surface-variant); padding: 2px 4px; border-radius: 4px;">{"error":"rate limit exceeded"}</code>
                 </p>
             </div>
         </section>
@@ -378,7 +384,7 @@
                         </div>
                         <div class="field">
                             <label class="label" for="br">最高音质 br（仅 song，仅网易云有效）</label>
-                            <input id="br" class="input" name="br" placeholder="纯数字，例如 1411" />
+                            <input id="br" class="input" name="br" placeholder="纯数字，例如 400" />
                         </div>
                         <div class="field">
                             <label class="label" for="yrc">逐字歌词 yrc</label>
@@ -393,6 +399,13 @@
                             <select id="handsome" name="handsome">
                                 <option value="false" selected>false（默认）</option>
                                 <option value="true">true（song/playlist 返回 cover 字段）</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label class="label" for="img_redirect">强制图片重定向 img_redirect</label>
+                            <select id="img_redirect" name="img_redirect">
+                                <option value="false" selected>false（默认）</option>
+                                <option value="true">true（直接返回源站图片链接）</option>
                             </select>
                         </div>
                         <div class="actions">
@@ -439,7 +452,7 @@
                         <div class="label">keyword：搜索关键词（仅使用搜索功能时携带）</div>
                     </div>
                     <div class="section">
-                        <div class="label">br：歌曲最高音质（仅使用单曲功能时 可选 携带，目前仅网易云有效，指定纯数字，如 1411 即 1411kbps）</div>
+                        <div class="label">br：歌曲最高音质（仅使用单曲功能时 可选 携带，目前仅网易云有效，指定纯数字，128标准(MP3) 320极高(MP3) 380无损(Flac) 400Hi-Res(Flac)）</div>
                     </div>
                     <div class="section">
                         <div class="label">yrc：网易云音乐逐字歌词解析开关，开启后优先解析逐字歌词</div>
@@ -450,6 +463,15 @@
                     <div class="section">
                         <div class="label">handsome：Handsome 主题兼容模式（可选）</div>
                         <div>• true 启用（song 和 playlist 返回 cover 字段而非 pic）</div>
+                    </div>
+                    <div class="section">
+                        <div class="label">refresh：强制刷新缓存（可选）</div>
+                        <div>• true 强制刷新（忽略缓存并尝试从上游获取最新数据）。<b>注意：</b>相同资源在 60 秒内仅允许强制刷新一次，超出频率将被忽略。</div>
+                    </div>
+                    <div class="section">
+                        <div class="label">img_redirect：强制图片重定向（可选）</div>
+                        <div>• true 启用（song/playlist/search 结果中的图片链接将直接指向源站图片，而不经过本服务器中转）</div>
+                        <div>• false 禁用（默认，返回本服务器的中转链接）</div>
                     </div>
 
                     <div class="section">
@@ -704,6 +726,7 @@
                     br: document.getElementById('br').value,
                     yrc: document.getElementById('yrc').value,
                     handsome: document.getElementById('handsome').value,
+                    img_redirect: document.getElementById('img_redirect').value,
                 };
                 await callApi(formData);
             });

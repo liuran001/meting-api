@@ -676,7 +676,7 @@ class Meting
         return $api;
     }
 
-    private function netease_encryptId($id)
+    public function netease_encryptId($id)
     {
         $magic = str_split('3go8&$8*3*3h0k(2)2');
         $song_id = str_split($id);

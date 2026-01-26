@@ -27,11 +27,14 @@ if (!defined('API_URI')) {
 if (!defined('TLYRIC')) {
     define('TLYRIC', $config['tlyric']);
 }
-if (!defined('CACHE')) {
-    define('CACHE', $config['cache']);
-}
 if (!defined('CACHE_TIME')) {
     define('CACHE_TIME', $config['cache_time']);
+}
+if (!defined('URL_CACHE_TIME')) {
+    define('URL_CACHE_TIME', $config['url_cache_time']);
+}
+if (!defined('PLAYLIST_CACHE_TIME')) {
+    define('PLAYLIST_CACHE_TIME', $config['playlist_cache_time']);
 }
 if (!defined('APCU_CACHE')) {
     define('APCU_CACHE', $config['apcu_cache']);
@@ -44,6 +47,21 @@ if (!defined('AUTH_SECRET')) {
 }
 if (!defined('NETEASE_COOKIE')) {
     define('NETEASE_COOKIE', $config['netease_cookie']);
+}
+if (!defined('RATE_LIMIT_ENABLE')) {
+    define('RATE_LIMIT_ENABLE', $config['rate_limit']);
+}
+if (!defined('RATE_LIMIT_HEADER')) {
+    define('RATE_LIMIT_HEADER', $config['rate_limit_header']);
+}
+if (!defined('RATE_LIMIT_WINDOW')) {
+    define('RATE_LIMIT_WINDOW', $config['rate_limit_window']);
+}
+if (!defined('RATE_LIMIT_COUNT')) {
+    define('RATE_LIMIT_COUNT', $config['rate_limit_count']);
+}
+if (!defined('FORCE_IMAGE_REDIRECT')) {
+    define('FORCE_IMAGE_REDIRECT', $config['force_image_redirect']);
 }
 if (!defined('METING_API')) {
     define('METING_API', true);
