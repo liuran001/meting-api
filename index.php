@@ -116,6 +116,7 @@ use Metowolf\Meting;
 
 $api = new Meting($server);
 $api->format(true);
+$api->lrctype($lrctype);
 
 if (!defined('METING_API')) {
     define('METING_API', true);
@@ -167,7 +168,7 @@ if ($yrc == 'true') {
 if ($type == 'playlist') {
 
     // 缓存键生成
-    $cache_key = $server . 'playlist' . $id . '_br' . $br . '_img' . $img_redirect . '_lrctype' . ($lrctype ?? 'default');
+    $cache_key = $server . 'playlist' . $id . '_br' . $br . '_img' . $img_redirect . '_dwrc' . $dwrc . '_lrctype' . ($lrctype ?? 'default');
 
     if (APCU_CACHE) {
         // 强制刷新频率限制 (60秒)
@@ -335,7 +336,7 @@ if ($type == 'playlist') {
             $apcu_type_key = $server . $type . $id . '_size' . $size_key;
         } else if ($type == 'song') {
             // song 类型受 img_redirect 和 handsome 参数影响
-            $apcu_type_key = $server . $type . $id . '_img' . $img_redirect . '_handsome' . $handsome . '_lrctype' . ($lrctype ?? 'default');
+            $apcu_type_key = $server . $type . $id . '_img' . $img_redirect . '_handsome' . $handsome . '_dwrc' . $dwrc . '_lrctype' . ($lrctype ?? 'default');
         } else {
             // 其他类型（name, artist等）
             $apcu_type_key = $server . $type . $id;

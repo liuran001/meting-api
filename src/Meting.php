@@ -31,6 +31,7 @@ class Meting
     public $format = false;
     public $dwrc = false;
     public $bakdwrc = false;
+    public $lrctype = 0;
     public $header;
     private $temp;
 
@@ -43,6 +44,12 @@ class Meting
     public function bakdwrc($value = false)
     {
         $this->bakdwrc = $value;
+        return $this;
+    }
+
+    public function lrctype($value = 0)
+    {
+        $this->lrctype = $value;
         return $this;
     }
 
@@ -801,16 +808,22 @@ class Meting
             $result = json_decode($result, true);
         }
 
-        $lyric = isset($result['yrc']['lyric']) ? $result['yrc']['lyric'] : '';
+        if ($this->lrctype == '2') {
+            $lyric = isset($result['lrc']['lyric']) ? $result['lrc']['lyric'] : '';
+        } else {
+            $lyric = isset($result['yrc']['lyric']) ? $result['yrc']['lyric'] : '';
+        }
+
+        $tlyric = isset($result['tlyric']['lyric']) ? $result['tlyric']['lyric'] : '';
         
         // 简单的检查是否为 YRC 格式
-        if ($lyric && preg_match('/^\[\d+,\d+\]/', $lyric)) {
-            $lyric = $this->yrcToVerbatim($lyric);
+        if ($this->lrctype != '2' && $lyric && preg_match('/^\[\d+,\d+\]/', $lyric)) {
+            $lyric = $this->yrcToVerbatim($lyric, ($this->lrctype == '1') ? $tlyric : '');
         }
 
         $data = array(
             'lyric'  => $lyric,
-            'tlyric' => isset($result['none']['lyric']) ? $result['none']['lyric'] : '',
+            'tlyric' => $tlyric,
         );
 
         return json_encode($data, JSON_UNESCAPED_UNICODE);
@@ -907,9 +920,29 @@ class Meting
         return $result;
     }
 
-    private function yrcToVerbatim($lyric)
+    private function yrcToVerbatim($lyric, $tlyric = "")
     {
         $lines = preg_split('/\\\\n|\n|\r\n|\r/', $lyric);
+        
+        // Parse translation lyrics if provided
+        $transMap = [];
+        if (!empty($tlyric)) {
+            $tlines = preg_split('/\\\\n|\n|\r\n|\r/', $tlyric);
+            foreach ($tlines as $tline) {
+                $tline = trim($tline);
+                if (empty($tline)) continue;
+                if (preg_match('/^\[(\d+):(\d+)(\.(\d+))?\](.*)$/', $tline, $matches)) {
+                    $min = intval($matches[1]);
+                    $sec = intval($matches[2]);
+                    $ms = isset($matches[4]) ? intval(str_pad($matches[4], 3, '0', STR_PAD_RIGHT)) : 0;
+                    if (isset($matches[4]) && strlen($matches[4]) == 2) $ms = intval($matches[4]) * 10;
+                    
+                    $timeMs = $min * 60000 + $sec * 1000 + $ms;
+                    $transMap[$timeMs] = isset($matches[5]) ? trim($matches[5]) : '';
+                }
+            }
+        }
+
         $result = [];
 
         foreach ($lines as $line) {
@@ -962,6 +995,23 @@ class Meting
             } else {
                 // Fallback for lines without word timestamps
                 $result[] = $this->formatTime($lineStart) . $content . $this->formatTime($lineEnd);
+            }
+            
+            // Find best matching translation line
+            $bestMatchKey = null;
+            $minDiff = 1500; // Tolerance 1500ms
+
+            foreach ($transMap as $time => $txt) {
+                $diff = abs($time - $lineStart);
+                if ($diff < $minDiff) {
+                    $minDiff = $diff;
+                    $bestMatchKey = $time;
+                }
+            }
+            
+            if ($bestMatchKey !== null) {
+                $result[] = $transMap[$bestMatchKey];
+                unset($transMap[$bestMatchKey]); // Remove used translation
             }
         }
 
