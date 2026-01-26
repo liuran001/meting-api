@@ -492,6 +492,15 @@
                             </select>
                         </div>
                         <div class="field">
+                            <label class="label" for="lrctype">歌词格式 lrctype</label>
+                            <select id="lrctype" name="lrctype">
+                                <option value="" selected>默认（原词/括号）</option>
+                                <option value="0">0（仅原词）</option>
+                                <option value="1">1（原词 + 翻译 SPL）</option>
+                                <option value="2">2（仅翻译）</option>
+                            </select>
+                        </div>
+                        <div class="field">
                             <label class="label" for="handsome">Handsome 兼容模式</label>
                             <select id="handsome" name="handsome">
                                 <option value="false" selected>false（默认）</option>
@@ -603,6 +612,19 @@
                                 <div><span class="param-val">false</span> <span>禁用（默认）</span></div>
                                 <div><span class="param-val">true</span> <span>启用（优先解析逐字歌词）</span></div>
                                 <div><span class="param-val">open</span> <span>备用模式（无逐字歌词时不返回普通歌词）</span></div>
+                            </div>
+                        </div>
+
+                        <div class="param-item">
+                            <div class="param-header">
+                                <span class="param-key">lrctype</span>
+                                <span class="param-name">歌词格式</span>
+                            </div>
+                            <div class="param-desc">歌词翻译格式控制。</div>
+                            <div class="param-sub">
+                                <div><span class="param-val">0</span> <span>原词</span></div>
+                                <div><span class="param-val">1</span> <span>原词 + 翻译 (SPL)</span></div>
+                                <div><span class="param-val">2</span> <span>仅翻译</span></div>
                             </div>
                         </div>
 
@@ -915,6 +937,7 @@
                     picsize: document.getElementById('picsize').value,
                     br: document.getElementById('br').value,
                     yrc: document.getElementById('yrc').value,
+                    lrctype: document.getElementById('lrctype').value,
                     handsome: document.getElementById('handsome').value,
                     img_redirect: document.getElementById('img_redirect').value,
                 };

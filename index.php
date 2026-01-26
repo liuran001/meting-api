@@ -45,6 +45,7 @@ if ($img_redirect === null || $img_redirect === '') {
 } else {
     $img_redirect = strtolower(trim($img_redirect)) === 'true' ? 'true' : 'false';
 }
+$lrctype = filter_input(INPUT_GET, 'lrctype', FILTER_SANITIZE_SPECIAL_CHARS);
 
 
 if (AUTH) {
@@ -166,7 +167,7 @@ if ($yrc == 'true') {
 if ($type == 'playlist') {
 
     // 缓存键生成
-    $cache_key = $server . 'playlist' . $id . '_br' . $br . '_img' . $img_redirect;
+    $cache_key = $server . 'playlist' . $id . '_br' . $br . '_img' . $img_redirect . '_lrctype' . ($lrctype ?? 'default');
 
     if (APCU_CACHE) {
         // 强制刷新频率限制 (60秒)
@@ -219,6 +220,9 @@ if ($type == 'playlist') {
             $lrc_url .= '&yrc=true';
         } else if ($dwrc == 'open') {
             $lrc_url .= '&yrc=open';
+        }
+        if ($lrctype !== null) {
+            $lrc_url .= '&lrctype=' . $lrctype;
         }
 
         $playlist[] = array(
@@ -282,6 +286,9 @@ if ($type == 'playlist') {
         } else if ($dwrc == 'open') {
             $lrc_url .= '&yrc=open';
         }
+        if ($lrctype !== null) {
+            $lrc_url .= '&lrctype=' . $lrctype;
+        }
 
         $search[] = array(
             'name'   => $song['name'],
@@ -318,7 +325,7 @@ if ($type == 'playlist') {
         // 根据不同类型构建缓存键
         if ($type == 'lrc') {
             // 歌词缓存需要包含dwrc参数（yrc/qrc会被统一为dwrc）
-            $apcu_type_key = $server . $type . $id . '_dwrc' . $dwrc;
+            $apcu_type_key = $server . $type . $id . '_dwrc' . $dwrc . '_lrctype' . ($lrctype ?? 'default');
         } else if ($type == 'url') {
             // url缓存需要包含音质参数
             $apcu_type_key = $server . $type . $id . '_br' . $br;
@@ -328,7 +335,7 @@ if ($type == 'playlist') {
             $apcu_type_key = $server . $type . $id . '_size' . $size_key;
         } else if ($type == 'song') {
             // song 类型受 img_redirect 和 handsome 参数影响
-            $apcu_type_key = $server . $type . $id . '_img' . $img_redirect . '_handsome' . $handsome;
+            $apcu_type_key = $server . $type . $id . '_img' . $img_redirect . '_handsome' . $handsome . '_lrctype' . ($lrctype ?? 'default');
         } else {
             // 其他类型（name, artist等）
             $apcu_type_key = $server . $type . $id;
@@ -364,7 +371,7 @@ if ($type == 'playlist') {
     }
 
     if (!$need_song) {
-        $data = song2data($api, null, $type, $id, $dwrc, $picsize, $br, $handsome, $img_redirect);
+        $data = song2data($api, null, $type, $id, $dwrc, $picsize, $br, $handsome, $img_redirect, $lrctype);
     } else {
         if (!isset($song)) $song = $api->song($id);
         if ($song == '[]') {
@@ -374,7 +381,7 @@ if ($type == 'playlist') {
         if (APCU_CACHE) {
             apcu_store($apcu_song_id_key, $song, $apcu_time);
         }
-        $data = song2data($api, json_decode($song)[0], $type, $id, $dwrc, $picsize, $br, $handsome, $img_redirect);
+        $data = song2data($api, json_decode($song)[0], $type, $id, $dwrc, $picsize, $br, $handsome, $img_redirect, $lrctype);
     }
 
     if (APCU_CACHE) {
@@ -534,7 +541,7 @@ function checkRateLimit($ip)
     return true;
 }
 
-function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'false', $img_redirect = 'false')
+function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'false', $img_redirect = 'false', $lrctype = null)
 {
     $data = '';
     switch ($type) {
@@ -576,6 +583,38 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
                 $lrc = '';
             } else if ($lrc_data->tlyric == '') {
                 $lrc = $lrc_data->lyric;
+            } else if ($lrctype !== null) {
+                if ($lrctype == '0') {
+                    $lrc = $lrc_data->lyric;
+                } else if ($lrctype == '2') {
+                    $lrc = $lrc_data->tlyric;
+                } else if ($lrctype == '1') {
+                    $lrc_arr = explode("\n", $lrc_data->lyric);
+                    $lrc_cn_arr = explode("\n", $lrc_data->tlyric);
+                    $lrc_cn_map = array();
+                    foreach ($lrc_cn_arr as $i => $v) {
+                        if ($v == '') continue;
+                        $line = explode(']', $v, 2);
+                        // 格式化处理
+                        $line[1] = isset($line[1]) ? trim(preg_replace('/\s\s+/', ' ', $line[1] ?? '')) : '';
+                        $lrc_cn_map[$line[0]] = $line[1];
+                    }
+                    $final_lrc = [];
+                    foreach ($lrc_arr as $v) {
+                        if ($v == '') continue;
+                        $final_lrc[] = $v;
+                        $parts = explode(']', $v, 2);
+                        if (count($parts) >= 2) {
+                            $key = $parts[0];
+                            if (isset($lrc_cn_map[$key]) && $lrc_cn_map[$key] != '//') {
+                                $final_lrc[] = $key . ']' . $lrc_cn_map[$key];
+                            }
+                        }
+                    }
+                    $lrc = implode("\n", $final_lrc);
+                } else {
+                    $lrc = $lrc_data->lyric;
+                }
             } else if (TLYRIC) { // lyric_cn
                 $lrc_arr = explode("\n", $lrc_data->lyric);
                 $lrc_cn_arr = explode("\n", $lrc_data->tlyric);
@@ -600,6 +639,8 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
             } else {
                 $lrc = $lrc_data->lyric;
             }
+            // 移除时间戳后面紧跟的空格
+            $lrc = preg_replace('/(\[[0-9:.]+\])\s+/', '$1', $lrc);
             $data = $lrc;
             break;
 
@@ -609,6 +650,9 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
                 $lrc_url .= '&yrc=true';
             } else if ($dwrc == 'open') {
                 $lrc_url .= '&yrc=open';
+            }
+            if ($lrctype !== null) {
+                $lrc_url .= '&lrctype=' . $lrctype;
             }
 
             // Handsome 主题兼容模式
