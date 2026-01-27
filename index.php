@@ -82,11 +82,11 @@ if (defined('PHP_EXECUTABLE')) {
 // 使用 proc_open 在后台运行PV记录，立即返回
 $descriptors = array();
 $process = @proc_open(
-    escapeshellcmd($php_path) . ' ' . escapeshellarg($pv_script) . ' ' . 
-    escapeshellarg($ip) . ' ' . 
-    escapeshellarg($ref) . ' ' . 
-    escapeshellarg($server) . ' ' . 
-    escapeshellarg($type) . ' ' . 
+    escapeshellcmd($php_path) . ' ' . escapeshellarg($pv_script) . ' ' .
+    escapeshellarg($ip) . ' ' .
+    escapeshellarg($ref) . ' ' .
+    escapeshellarg($server) . ' ' .
+    escapeshellarg($type) . ' ' .
     escapeshellarg($id),
     $descriptors,
     $pipes
@@ -100,7 +100,7 @@ if ($handsome == 'true' && in_array($type, ['song', 'playlist'])) {
     header('content-type: application/javascript; charset=utf-8;');
 } else if (in_array($type, ['song', 'playlist', 'search'])) {
     header('content-type: application/json; charset=utf-8;');
-} else if (in_array($type, ['name', 'lrc', 'artist'])) {
+} else if (in_array($type, ['name', 'lrc', 'artist', 'album'])) {
     header('content-type: text/plain; charset=utf-8;');
 }
 
@@ -213,7 +213,7 @@ if ($type == 'playlist') {
     }
     $data = json_decode($data);
     $playlist = array();
-    
+
     // 统一使用标准格式'pic'构建数据
     foreach ($data as $song) {
         $lrc_url = API_URI . '?server=' . $song->source . '&type=lrc&id=' . $song->lyric_id . (AUTH ? '&auth=' . auth($song->source . 'lrc' . $song->lyric_id) : '');
@@ -226,17 +226,28 @@ if ($type == 'playlist') {
             $lrc_url .= '&lrctype=' . $lrctype;
         }
 
-        $playlist[] = array(
-            'name'   => $song->name,
-            'artist' => implode('/', $song->artist),
-            'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
-            'pic'    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
-            'lrc'    => $lrc_url
-        );
+        if ($handsome == 'true') {
+            $playlist[] = array(
+                'name'   => $song->name,
+                'artist' => implode('/', $song->artist),
+                'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
+                'pic'    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
+                'lrc'    => $lrc_url
+            );
+        } else {
+            $playlist[] = array(
+                'name'   => $song->name,
+                'artist' => implode('/', $song->artist),
+                'album'  => $song->album,
+                'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
+                'pic'    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
+                'lrc'    => $lrc_url
+            );
+        }
     }
 
     $playlist_json = json_encode($playlist);
-    
+
     if (APCU_CACHE) {
         apcu_store($cache_key, $playlist_json, PLAYLIST_CACHE_TIME);
     }
@@ -278,7 +289,7 @@ if ($type == 'playlist') {
     }
 
     $search = array();
-    
+
     // 统一使用标准格式'pic'构建数据
     foreach ($data_array as $song) {
         $lrc_url = API_URI . '?server=' . $song['source'] . '&type=lrc&id=' . $song['lyric_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'lrc' . $song['lyric_id']) : '');
@@ -316,7 +327,7 @@ if ($type == 'playlist') {
     exit;
 } else {
     $need_song = !in_array($type, ['url', 'pic', 'lrc']);
-    if ($need_song && !in_array($type, ['name', 'artist', 'song'])) {
+    if ($need_song && !in_array($type, ['name', 'artist', 'album', 'song'])) {
         echo '{"error":"不支持的操作"}';
         exit;
     }
@@ -338,7 +349,7 @@ if ($type == 'playlist') {
             // song 类型受 img_redirect 和 handsome 参数影响
             $apcu_type_key = $server . $type . $id . '_img' . $img_redirect . '_handsome' . $handsome . '_dwrc' . $dwrc . '_lrctype' . ($lrctype ?? 'default');
         } else {
-            // 其他类型（name, artist等）
+            // 其他类型（name, artist, album等）
             $apcu_type_key = $server . $type . $id;
         }
 
@@ -423,7 +434,7 @@ function getIP()
         $ip = getenv("HTTP_X_FORWARDED_FOR");
     else if(getenv("REMOTE_ADDR"))
         $ip = getenv("REMOTE_ADDR");
-    else 
+    else
         $ip = "Unknow";
     return $ip;
 }
@@ -459,7 +470,7 @@ function get_pic_url($api, $source, $pic_id, $picsize, $img_redirect)
             }
         }
     }
-    
+
     // Default to API proxy
     return API_URI . '?server=' . $source . '&type=pic&id=' . $pic_id . (AUTH ? '&auth=' . auth($source . 'pic' . $pic_id) : '');
 }
@@ -476,7 +487,7 @@ function checkRateLimit($ip)
 
     $window = defined('RATE_LIMIT_WINDOW') ? RATE_LIMIT_WINDOW : 60;
     $limit = defined('RATE_LIMIT_COUNT') ? RATE_LIMIT_COUNT : 60;
-    
+
     // 1. 优先使用 APCu
     if (function_exists('apcu_enabled') && apcu_enabled()) {
         $key = 'meting_rl_' . md5($ip);
@@ -496,18 +507,18 @@ function checkRateLimit($ip)
         if (!is_dir($rl_dir)) {
             if (!@mkdir($rl_dir, 0777, true)) return true; // 无法创建目录则跳过限流
         }
-        
+
         $file = $rl_dir . '/' . md5($ip) . '.json';
         $current_time = time();
-        
+
         // 简单的文件锁机制
         $fp = @fopen($file, 'c+');
         if (!$fp) return true;
-        
+
         if (flock($fp, LOCK_EX)) {
             $content = fread($fp, 1024);
             $data = json_decode($content, true);
-            
+
             if (!$data || $current_time - $data['start'] > $window) {
                 // 新窗口
                 $data = [
@@ -552,6 +563,10 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
 
         case 'artist':
             $data = implode('/', $song->artist);
+            break;
+
+        case 'album':
+            $data = $song->album;
             break;
 
         case 'url':
@@ -605,45 +620,48 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
                     for ($i = 0; $i < $lrc_count; $i++) {
                         $v = $lrc_arr[$i];
                         if ($v == '') continue;
-                        
+
                         $final_lrc[] = $v;
-                        
+
                         $parts = explode(']', $v, 2);
                         if (count($parts) >= 2) {
                             $key = $parts[0];
                             $content = isset($parts[1]) ? $parts[1] : '';
-                            
+
                             if (isset($lrc_cn_map[$key]) && $lrc_cn_map[$key] != '//') {
                                 $trans = $lrc_cn_map[$key];
-                                $should_output = true;
+                                // Check if the translation is just whitespace or empty
+                                if (trim($trans) !== '') {
+                                    $should_output = true;
 
-                                // Check metadata
-                                if (preg_match('/(作词|作曲|制作人|编曲)/', $content)) {
-                                    $conflict = false;
-                                    $next_key = null;
-                                    
-                                    // Look ahead for next valid line
-                                    for ($j = $i + 1; $j < $lrc_count; $j++) {
-                                        if ($lrc_arr[$j] == '') continue;
-                                        $p2 = explode(']', $lrc_arr[$j], 2);
-                                        if (count($p2) >= 2) {
-                                            $next_key = $p2[0];
-                                            if ($next_key !== $key && isset($lrc_cn_map[$next_key]) && $lrc_cn_map[$next_key] != '//') {
-                                                $conflict = true;
+                                    // Check metadata
+                                    if (preg_match('/(作词|作曲|制作人|编曲)/', $content)) {
+                                        $conflict = false;
+                                        $next_key = null;
+
+                                        // Look ahead for next valid line
+                                        for ($j = $i + 1; $j < $lrc_count; $j++) {
+                                            if ($lrc_arr[$j] == '') continue;
+                                            $p2 = explode(']', $lrc_arr[$j], 2);
+                                            if (count($p2) >= 2) {
+                                                $next_key = $p2[0];
+                                                if ($next_key !== $key && isset($lrc_cn_map[$next_key]) && $lrc_cn_map[$next_key] != '//') {
+                                                    $conflict = true;
+                                                }
+                                                break;
                                             }
-                                            break;
+                                        }
+
+                                        if (!$conflict && $next_key) {
+                                            // No conflict, move translation to next line
+                                            $lrc_cn_map[$next_key] = $trans;
+                                            $should_output = false;
                                         }
                                     }
-                                    
-                                    if (!$conflict && $next_key) {
-                                        // No conflict, move translation to next line
-                                        $lrc_cn_map[$next_key] = $trans;
-                                        $should_output = false;
+
+                                    if ($should_output) {
+                                        $final_lrc[] = $key . ']' . $trans;
                                     }
-                                }
-                                
-                                if ($should_output) {
-                                    $final_lrc[] = $key . ']' . $trans;
                                 }
                             }
                         }
@@ -674,13 +692,25 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
             // Handsome 主题兼容模式
             $pic_key = ($handsome == 'true') ? 'cover' : 'pic';
 
-            $data = json_encode(array(array(
-                'name'   => $song->name,
-                'artist' => implode('/', $song->artist),
-                'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
-                $pic_key    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
-                'lrc'    => $lrc_url
-            )));
+            // 在 handsome 模式下不添加 album 字段
+            if ($handsome == 'true') {
+                $data = json_encode(array(array(
+                    'name'   => $song->name,
+                    'artist' => implode('/', $song->artist),
+                    'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
+                    $pic_key    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
+                    'lrc'    => $lrc_url
+                )));
+            } else {
+                $data = json_encode(array(array(
+                    'name'   => $song->name,
+                    'artist' => implode('/', $song->artist),
+                    'album'  => $song->album,
+                    'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
+                    $pic_key    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
+                    'lrc'    => $lrc_url
+                )));
+            }
             break;
     }
     if ($data == '') exit;

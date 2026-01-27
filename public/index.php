@@ -462,6 +462,7 @@
                                 <option value="search">search（搜索）</option>
                                 <option value="name">name（歌曲名）</option>
                                 <option value="artist">artist（歌手）</option>
+                                <option value="album">album（专辑名）</option>
                                 <option value="url">url（链接）</option>
                                 <option value="pic">pic（封面）</option>
                                 <option value="lrc">lrc（歌词）</option>
@@ -554,6 +555,7 @@
                                 <div><span class="param-val">url</span> <span>音频链接</span></div>
                                 <div><span class="param-val">pic</span> <span>封面链接</span></div>
                                 <div><span class="param-val">lrc</span> <span>歌词</span></div>
+                                <div><span class="param-val">album</span> <span>专辑名</span></div>
                                 <div><span class="param-val">song</span> <span>单曲信息（JSON）</span></div>
                                 <div><span class="param-val">playlist</span> <span>歌单信息（JSON）</span></div>
                                 <div><span class="param-val">search</span> <span>搜索结果（JSON）</span></div>
@@ -688,6 +690,7 @@
                         <div style="font-weight: 600; font-size: 15px; margin-bottom: 8px;">请求示例</div>
                         <div class="example-list" style="font-size: 14px; line-height: 2;">
                             <a href="<?php echo API_URI ?>?server=netease&type=url&id=1969519579" target="_blank"><?php echo API_URI ?>?server=netease&type=url&id=1969519579</a><br />
+                            <a href="<?php echo API_URI ?>?server=netease&type=album&id=1969519579" target="_blank"><?php echo API_URI ?>?server=netease&type=album&id=1969519579</a><br />
                             <a href="<?php echo API_URI ?>?server=netease&type=song&id=1969519579" target="_blank"><?php echo API_URI ?>?server=netease&type=song&id=1969519579</a><br />
                             <a href="<?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&yrc=true" target="_blank"><?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&yrc=true</a><br />
                             <a href="<?php echo API_URI ?>?server=netease&type=search&id=0&yrc=true&keyword=寄往未来的信" target="_blank"><?php echo API_URI ?>?server=netease&type=search&id=0&yrc=true&keyword=寄往未来的信</a>
