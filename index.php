@@ -167,7 +167,7 @@ if ($yrc == 'true') {
 
 if ($type == 'playlist') {
 
-    // 缓存键生成
+    // 缓存键生成 - 不包含handsome参数，统一缓存
     $cache_key = $server . 'playlist' . $id . '_br' . $br . '_img' . $img_redirect . '_dwrc' . $dwrc . '_lrctype' . ($lrctype ?? 'default');
 
     if (APCU_CACHE) {
@@ -183,13 +183,18 @@ if ($type == 'playlist') {
 
         if (!$refresh && apcu_exists($cache_key)) {
             $cached_data = apcu_fetch($cache_key);
-            // 如果是handsome模式，动态转换pic为cover
+            // 根据当前请求的handsome状态动态转换数据
             if ($handsome == 'true') {
                 $playlist_array = json_decode($cached_data, true);
                 foreach ($playlist_array as &$item) {
+                    // 转换 pic 为 cover
                     if (isset($item['pic'])) {
                         $item['cover'] = $item['pic'];
                         unset($item['pic']);
+                    }
+                    // 移除 album 字段
+                    if (isset($item['album'])) {
+                        unset($item['album']);
                     }
                 }
                 echo json_encode($playlist_array);
@@ -214,7 +219,7 @@ if ($type == 'playlist') {
     $data = json_decode($data);
     $playlist = array();
 
-    // 统一使用标准格式'pic'构建数据
+    // 统一使用标准格式构建数据（始终包含 album 和 pic 字段）
     foreach ($data as $song) {
         $lrc_url = API_URI . '?server=' . $song->source . '&type=lrc&id=' . $song->lyric_id . (AUTH ? '&auth=' . auth($song->source . 'lrc' . $song->lyric_id) : '');
         if ($dwrc == 'true') {
@@ -226,24 +231,14 @@ if ($type == 'playlist') {
             $lrc_url .= '&lrctype=' . $lrctype;
         }
 
-        if ($handsome == 'true') {
-            $playlist[] = array(
-                'name'   => $song->name,
-                'artist' => implode('/', $song->artist),
-                'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
-                'pic'    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
-                'lrc'    => $lrc_url
-            );
-        } else {
-            $playlist[] = array(
-                'name'   => $song->name,
-                'artist' => implode('/', $song->artist),
-                'album'  => $song->album,
-                'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
-                'pic'    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
-                'lrc'    => $lrc_url
-            );
-        }
+        $playlist[] = array(
+            'name'   => $song->name,
+            'artist' => implode('/', $song->artist),
+            'album'  => $song->album,  // 始终包含 album 字段
+            'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
+            'pic'    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
+            'lrc'    => $lrc_url
+        );
     }
 
     $playlist_json = json_encode($playlist);
@@ -252,11 +247,14 @@ if ($type == 'playlist') {
         apcu_store($cache_key, $playlist_json, PLAYLIST_CACHE_TIME);
     }
 
-    // 如果是handsome模式，转换pic为cover后再输出
+    // 根据当前请求的handsome状态动态转换并输出
     if ($handsome == 'true') {
         foreach ($playlist as &$item) {
+            // 转换 pic 为 cover
             $item['cover'] = $item['pic'];
             unset($item['pic']);
+            // 移除 album 字段
+            unset($item['album']);
         }
         echo json_encode($playlist);
     } else {
@@ -346,8 +344,8 @@ if ($type == 'playlist') {
             $size_key = ($picsize !== null && $picsize !== '') ? $picsize : 'default';
             $apcu_type_key = $server . $type . $id . '_size' . $size_key;
         } else if ($type == 'song') {
-            // song 类型受 img_redirect 和 handsome 参数影响
-            $apcu_type_key = $server . $type . $id . '_img' . $img_redirect . '_handsome' . $handsome . '_dwrc' . $dwrc . '_lrctype' . ($lrctype ?? 'default');
+            // song 类型受 img_redirect 影响，但不包括 handsome 参数以统一缓存
+            $apcu_type_key = $server . $type . $id . '_img' . $img_redirect . '_dwrc' . $dwrc . '_lrctype' . ($lrctype ?? 'default');
         } else {
             // 其他类型（name, artist, album等）
             $apcu_type_key = $server . $type . $id;
@@ -689,28 +687,26 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
                 $lrc_url .= '&lrctype=' . $lrctype;
             }
 
-            // Handsome 主题兼容模式
-            $pic_key = ($handsome == 'true') ? 'cover' : 'pic';
+            // 构建统一的数据结构（始终包含 album 和 pic 字段）
+            $song_data = array(
+                'name'   => $song->name,
+                'artist' => implode('/', $song->artist),
+                'album'  => $song->album,  // 始终包含 album 字段
+                'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
+                'pic'    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
+                'lrc'    => $lrc_url
+            );
 
-            // 在 handsome 模式下不添加 album 字段
+            // 根据当前请求的 handsome 状态动态转换数据
             if ($handsome == 'true') {
-                $data = json_encode(array(array(
-                    'name'   => $song->name,
-                    'artist' => implode('/', $song->artist),
-                    'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
-                    $pic_key    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
-                    'lrc'    => $lrc_url
-                )));
-            } else {
-                $data = json_encode(array(array(
-                    'name'   => $song->name,
-                    'artist' => implode('/', $song->artist),
-                    'album'  => $song->album,
-                    'url'    => API_URI . '?server=' . $song->source . '&type=url&id=' . $song->url_id . (AUTH ? '&auth=' . auth($song->source . 'url' . $song->url_id) : ''),
-                    $pic_key    => get_pic_url($api, $song->source, $song->pic_id, $picsize, $img_redirect),
-                    'lrc'    => $lrc_url
-                )));
+                // 转换 pic 为 cover
+                $song_data['cover'] = $song_data['pic'];
+                unset($song_data['pic']);
+                // 移除 album 字段
+                unset($song_data['album']);
             }
+
+            $data = json_encode(array($song_data));
             break;
     }
     if ($data == '') exit;
