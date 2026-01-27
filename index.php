@@ -447,7 +447,7 @@ function get_pic_url($api, $source, $pic_id, $picsize, $img_redirect)
     if ($img_redirect === 'true') {
         if ($source == 'netease') {
             if (isset($picsize) && !empty($picsize)) {
-                return 'https://p3.music.126.net/' . $api->netease_encryptId($pic_id) . '/' . $pic_id . '.jpg?param=' . $picsize . 'x' . $picsize;
+                return 'https://p3.music.126.net/' . $api->netease_encryptId($pic_id) . '/' . $pic_id . '.jpg?param=' . $picsize . 'y' . $picsize;
             } else {
                 return 'https://p3.music.126.net/' . $api->netease_encryptId($pic_id) . '/' . $pic_id . '.jpg';
             }

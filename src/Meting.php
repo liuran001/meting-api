@@ -549,7 +549,7 @@ class Meting
         switch ($this->server) {
             case 'netease':
                 if (isset($size) && !empty($size)) {
-                    $url = 'https://p3.music.126.net/' . $this->netease_encryptId($id) . '/' . $id . '.jpg?param=' . $size . 'x' . $size;
+                    $url = 'https://p3.music.126.net/' . $this->netease_encryptId($id) . '/' . $id . '.jpg?param=' . $size . 'y' . $size;
                 } else {
                     $url = 'https://p3.music.126.net/' . $this->netease_encryptId($id) . '/' . $id . '.jpg';
                 };
