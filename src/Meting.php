@@ -1016,7 +1016,7 @@ class Meting
                 $trans = $transMap[$bestMatchKey];
 
                 // Check metadata
-                if (preg_match('/(作词|作曲|制作人)/', $content)) {
+                if (preg_match('/(作词|作曲|制作人|编曲)/', $content)) {
                     $conflict = false;
                     $next_start = null;
 
