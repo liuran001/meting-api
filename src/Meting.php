@@ -1001,60 +1001,26 @@ class Meting
             
             // Find best matching translation line
             $bestMatchKey = null;
-            $minDiff = 1500; // Tolerance 1500ms
+            ksort($transMap); // Ensure chronological order
+
+            $isLineMetadata = preg_match('/(作词|作曲|制作人|编曲|歌手|演唱|专辑|发行)/u', $content) > 0;
 
             foreach ($transMap as $time => $txt) {
+                $isTransMetadata = preg_match('/(作词|作曲|制作人|编曲|歌手|演唱|专辑|发行|by:|歌词|字幕|翻译|校对)/iu', $txt) > 0;
+
+                // 核心逻辑：元数据行只能匹配元数据翻译，普通歌词行只能匹配普通歌词翻译
+                if ($isLineMetadata !== $isTransMetadata) continue;
+
                 $diff = abs($time - $lineStart);
-                if ($diff < $minDiff) {
-                    $minDiff = $diff;
+                if ($diff < 1500) { // Tolerance
                     $bestMatchKey = $time;
+                    break; // 优先取时间轴上最早匹配的，以保持歌词序列一致
                 }
             }
             
             if ($bestMatchKey !== null) {
-                $should_output = true;
-                $trans = $transMap[$bestMatchKey];
-
-                // Check metadata
-                if (preg_match('/(作词|作曲|制作人|编曲)/', $content)) {
-                    $conflict = false;
-                    $next_start = null;
-
-                    // Look ahead
-                    for ($j = $i + 1; $j < $count; $j++) {
-                        $next_line = trim($lines[$j]);
-                        if (empty($next_line)) continue;
-                        if (preg_match('/^\[(\d+),(\d+)\]/', $next_line, $next_matches)) {
-                            $next_start = intval($next_matches[1]);
-                            
-                            // Check if next line has a potential match in remaining map (excluding current)
-                            foreach ($transMap as $time => $txt) {
-                                if ($time == $bestMatchKey) continue;
-                                // If the "other" translation is basically the same time as OUR translation (which we are holding), it's not a conflict?
-                                // Wait, if time == bestMatchKey, we continued.
-                                // If time is different, but close to next_start.
-                                
-                                if (abs($time - $next_start) < 1500) {
-                                    $conflict = true;
-                                    break;
-                                }
-                            }
-                            break;
-                        }
-                    }
-
-                    if (!$conflict && $next_start !== null) {
-                        // Move translation to next line
-                        $transMap[$next_start] = $trans;
-                        unset($transMap[$bestMatchKey]);
-                        $should_output = false;
-                    }
-                }
-
-                if ($should_output) {
-                    $result[] = $trans;
-                    unset($transMap[$bestMatchKey]); // Remove used translation
-                }
+                $result[] = $transMap[$bestMatchKey];
+                unset($transMap[$bestMatchKey]);
             }
         }
 
