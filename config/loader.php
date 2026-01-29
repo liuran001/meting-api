@@ -57,9 +57,6 @@ if (!defined('RATE_LIMIT_HEADER')) {
 if (!defined('RATE_LIMIT_WINDOW')) {
     define('RATE_LIMIT_WINDOW', $config['rate_limit_window']);
 }
-if (!defined('RATE_LIMIT_COUNT')) {
-    define('RATE_LIMIT_COUNT', $config['rate_limit_count']);
-}
 if (!defined('FORCE_IMAGE_REDIRECT')) {
     define('FORCE_IMAGE_REDIRECT', $config['force_image_redirect']);
 }

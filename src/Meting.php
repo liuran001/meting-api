@@ -417,6 +417,67 @@ class Meting
         return $this->exec($api);
     }
 
+    public function playlistTrackIds($id)
+    {
+        if ($this->server != 'netease') {
+            return array();
+        }
+        $api = [
+            "method" => "POST",
+            "url" => "https://music.163.com/api/v6/playlist/detail",
+            "body" => [
+                "id" => $id,
+                "offset" => "0",
+                "total" => "True",
+                "limit" => "100000",
+                "n" => "100000",
+            ],
+            "encode" => "netease_AESCBC",
+        ];
+        $playlistData = json_decode($this->exec($api), true);
+        if (!isset($playlistData["playlist"]["trackIds"])) {
+            return array();
+        }
+        $trackIds = $playlistData["playlist"]["trackIds"];
+        return array_column($trackIds, "id");
+    }
+
+    public function songDetailBatch($ids)
+    {
+        if ($this->server != 'netease') {
+            return array();
+        }
+        if (!is_array($ids) || empty($ids)) {
+            return array();
+        }
+        $songIds = array_map(function ($id) {
+            return ["id" => $id, "v" => 0];
+        }, $ids);
+        $songApi = [
+            "method" => "POST",
+            "url" => "https://music.163.com/api/v3/song/detail/",
+            "body" => [
+                "c" => json_encode($songIds),
+            ],
+            "encode" => "netease_AESCBC",
+        ];
+        $songData = $this->exec($songApi);
+        $decoded = json_decode($songData, true);
+        if (!isset($decoded["songs"]) || !is_array($decoded["songs"])) {
+            return array();
+        }
+        return $decoded["songs"];
+    }
+
+    public function formatSong($data)
+    {
+        $formatter = 'format_' . $this->server;
+        if (method_exists($this, $formatter)) {
+            return call_user_func(array($this, $formatter), $data);
+        }
+        return array();
+    }
+
     public function url($id, $br = 2147483)
     {
         switch ($this->server) {

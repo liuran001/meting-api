@@ -169,8 +169,39 @@ return [
     'rate_limit_window' => 30,
 
     /**
-     * 周期内允许的最大请求次数
-     * 仅计算回源请求（未命中缓存的请求）
+     * 分类型限流规则
+     * list 代表 playlist/search
+     * other 代表其他类型
      */
-    'rate_limit_count' => 90,
+    'rate_limit_profiles' => [
+        'list_nocache' => [
+            'window' => 30,
+            'ip' => 30,
+            'total' => 70,
+        ],
+        'list_cache' => [
+            'window' => 30,
+            'ip' => 90,
+            'total' => 180,
+        ],
+        'other_nocache' => [
+            'window' => 30,
+            'ip' => 90,
+            'total' => 180,
+        ],
+        'other_cache' => [
+            'window' => 30,
+            'ip' => 300,
+            'total' => 600,
+        ],
+    ],
+
+    /**
+     * debug 限流规则（独立统计）
+     */
+    'rate_limit_debug' => [
+        'window' => 60,
+        'ip' => 5,
+        'total' => 30,
+    ],
 ];

@@ -428,7 +428,7 @@
                         注意：QQ音乐未经过测试，目前可能仅网易云解析可用
                     </p>
                     <p style="margin: 8px 0 0 0; line-height: 1.6; font-size: 14px; color: var(--md-outline);">
-                        限流规则：针对回源请求（未命中缓存）进行 IP 限流（默认 90次/30秒）。超限将返回 HTTP 429 错误：<code style="background: var(--md-surface-variant); padding: 2px 4px; border-radius: 4px;">{"error":"rate limit exceeded"}</code>
+                        限流规则：30 秒为一个限流周期，超限将返回 HTTP 429 错误：<code style="background: var(--md-surface-variant); padding: 2px 4px; border-radius: 4px;">{"error":"rate limit exceeded"}</code>
                     </p>
                 </div>
             </div>
@@ -512,6 +512,13 @@
                             <select id="img_redirect" name="img_redirect">
                                 <option value="false" selected>false（默认）</option>
                                 <option value="true">true（直接返回源站图片链接）</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label class="label" for="stream">流式输出 stream（仅 playlist）</label>
+                            <select id="stream" name="stream">
+                                <option value="false" selected>false（默认）</option>
+                                <option value="true">true（分块返回 JSON）</option>
                             </select>
                         </div>
                         <div class="actions">
@@ -665,6 +672,18 @@
                                 <div><span class="param-val">true</span> <span>启用（直接返回源站图片链接）</span></div>
                             </div>
                         </div>
+                        
+                        <div class="param-item">
+                            <div class="param-header">
+                                <span class="param-key">stream</span>
+                                <span class="param-name">流式输出</span>
+                            </div>
+                            <div class="param-desc">仅在 type=playlist 时可选，启用后分块返回 JSON，适合大歌单。</div>
+                            <div class="param-sub">
+                                <div><span class="param-val">false</span> <span>禁用（默认）</span></div>
+                                <div><span class="param-val">true</span> <span>启用（分块输出）</span></div>
+                            </div>
+                        </div>
 
                     </div>
                 </div>
@@ -693,6 +712,7 @@
                             <a href="<?php echo API_URI ?>?server=netease&type=album&id=1969519579" target="_blank"><?php echo API_URI ?>?server=netease&type=album&id=1969519579</a><br />
                             <a href="<?php echo API_URI ?>?server=netease&type=song&id=1969519579" target="_blank"><?php echo API_URI ?>?server=netease&type=song&id=1969519579</a><br />
                             <a href="<?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&yrc=true" target="_blank"><?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&yrc=true</a><br />
+                            <a href="<?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&stream=true" target="_blank"><?php echo API_URI ?>?server=netease&type=playlist&id=8900628861&stream=true</a><br />
                             <a href="<?php echo API_URI ?>?server=netease&type=search&id=0&yrc=true&keyword=寄往未来的信" target="_blank"><?php echo API_URI ?>?server=netease&type=search&id=0&yrc=true&keyword=寄往未来的信</a>
                         </div>
                     </div>
@@ -945,6 +965,7 @@
                     lrctype: document.getElementById('lrctype').value,
                     handsome: document.getElementById('handsome').value,
                     img_redirect: document.getElementById('img_redirect').value,
+                    stream: document.getElementById('stream').value,
                 };
                 await callApi(formData);
             });

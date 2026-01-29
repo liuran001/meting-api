@@ -16,7 +16,8 @@ if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/handsome
 // 加载配置文件
 $config = require __DIR__ . '/config/loader.php';
 
-if (!isset($_GET['type']) || !isset($_GET['id'])) {
+$raw_type = isset($_GET['type']) ? $_GET['type'] : null;
+if (!isset($raw_type) || $raw_type === '' || (!isset($_GET['id']) && $raw_type !== 'debug')) {
     include __DIR__ . '/public/index.php';
     exit;
 }
@@ -46,6 +47,13 @@ if ($img_redirect === null || $img_redirect === '') {
     $img_redirect = strtolower(trim($img_redirect)) === 'true' ? 'true' : 'false';
 }
 $lrctype = filter_input(INPUT_GET, 'lrctype', FILTER_SANITIZE_SPECIAL_CHARS);
+// 是否启用流式输出（仅用于 playlist）
+$stream = filter_input(INPUT_GET, 'stream', FILTER_SANITIZE_SPECIAL_CHARS);
+if ($stream === null || $stream === false || $stream === '') {
+    $stream = isset($_GET['stream']) ? $_GET['stream'] : 'false';
+}
+$stream = strtolower(trim($stream));
+$stream = ($stream === 'true' || $stream === '1');
 
 
 if (AUTH) {
@@ -98,7 +106,7 @@ if (is_resource($process)) {
 // 数据格式
 if ($handsome == 'true' && in_array($type, ['song', 'playlist'])) {
     header('content-type: application/javascript; charset=utf-8;');
-} else if (in_array($type, ['song', 'playlist', 'search'])) {
+} else if (in_array($type, ['song', 'playlist', 'search', 'debug'])) {
     header('content-type: application/json; charset=utf-8;');
 } else if (in_array($type, ['name', 'lrc', 'artist', 'album'])) {
     header('content-type: text/plain; charset=utf-8;');
@@ -165,7 +173,34 @@ if ($yrc == 'true') {
     $dwrc = 'false';
 };
 
-if ($type == 'playlist') {
+if ($type == 'debug') {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+    header('Surrogate-Control: no-store');
+    $debug_profile = getRateLimitDebugProfile();
+    $debug_profile['scope'] = 'debug';
+    if (!checkRateLimit($ip, $debug_profile['ip'], $debug_profile['total'], $debug_profile['window'], $debug_profile['scope'])) {
+        http_response_code(429);
+        echo '{"error":"rate limit exceeded"}';
+        exit;
+    }
+
+    $profiles = getRateLimitProfiles();
+    $profiles['debug'] = $debug_profile;
+
+    $status = getRateLimitStatus($ip, $profiles);
+
+    $payload = array(
+        'time' => date('c'),
+        'ip' => $ip,
+        'storage' => getRateLimitStorage(),
+        'ip_counts' => $status['ip'],
+        'total_counts' => $status['total']
+    );
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+    exit;
+} else if ($type == 'playlist') {
 
     // 缓存键生成 - 不包含handsome参数，统一缓存
     $cache_key = $server . 'playlist' . $id . '_br' . $br . '_img' . $img_redirect . '_dwrc' . $dwrc . '_lrctype' . ($lrctype ?? 'default');
@@ -182,6 +217,12 @@ if ($type == 'playlist') {
         }
 
         if (!$refresh && apcu_exists($cache_key)) {
+            $rate_profile = getRateProfile($type, true);
+            if (!checkRateLimit($ip, $rate_profile['ip'], $rate_profile['total'], $rate_profile['window'], $rate_profile['scope'])) {
+                http_response_code(429);
+                echo '{"error":"rate limit exceeded"}';
+                exit;
+            }
             $cached_data = apcu_fetch($cache_key);
             // 根据当前请求的handsome状态动态转换数据
             if ($handsome == 'true') {
@@ -205,12 +246,104 @@ if ($type == 'playlist') {
         }
     }
 
-    if (!checkRateLimit($ip)) {
+    $rate_profile = getRateProfile($type, false);
+    if (!checkRateLimit($ip, $rate_profile['ip'], $rate_profile['total'], $rate_profile['window'], $rate_profile['scope'])) {
         http_response_code(429);
         echo '{"error":"rate limit exceeded"}';
         exit;
     }
 
+    $stream_enabled = ($stream === true);
+
+    if ($stream_enabled && $server == 'netease') {
+        $track_ids = $api->playlistTrackIds($id);
+        if (empty($track_ids)) {
+            echo '{"error":"歌单不存在或为空"}';
+            exit;
+        }
+        // 流式输出：减少内存占用并尽快返回首包
+        if (function_exists('apache_setenv')) {
+            @apache_setenv('no-gzip', '1');
+        }
+        @ini_set('zlib.output_compression', '0');
+        @ini_set('output_buffering', 'off');
+        @ini_set('implicit_flush', '1');
+        while (ob_get_level() > 0) {
+            @ob_end_flush();
+        }
+        @ob_implicit_flush(1);
+        header('X-Accel-Buffering: no');
+        @set_time_limit(0);
+
+        echo '[';
+        $cache_json = APCU_CACHE ? '[' : null;
+        $first = true;
+        $count = 0;
+        $id_batches = array_chunk($track_ids, 500);
+        foreach ($id_batches as $batch) {
+            $songs = $api->songDetailBatch($batch);
+            if (empty($songs)) {
+                continue;
+            }
+            foreach ($songs as $raw_song) {
+                $song = $api->formatSong($raw_song);
+                if (empty($song)) {
+                    continue;
+                }
+
+                $lrc_url = API_URI . '?server=' . $song['source'] . '&type=lrc&id=' . $song['lyric_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'lrc' . $song['lyric_id']) : '');
+                if ($dwrc == 'true') {
+                    $lrc_url .= '&yrc=true';
+                } else if ($dwrc == 'open') {
+                    $lrc_url .= '&yrc=open';
+                }
+                if ($lrctype !== null) {
+                    $lrc_url .= '&lrctype=' . $lrctype;
+                }
+
+                $item = array(
+                    'name'   => $song['name'],
+                    'artist' => implode('/', $song['artist']),
+                    'album'  => $song['album'],
+                    'url'    => API_URI . '?server=' . $song['source'] . '&type=url&id=' . $song['url_id'] . (AUTH ? '&auth=' . auth($song['source'] . 'url' . $song['url_id']) : ''),
+                    'pic'    => get_pic_url($api, $song['source'], $song['pic_id'], $picsize, $img_redirect),
+                    'lrc'    => $lrc_url
+                );
+
+                $output_item = $item;
+                if ($handsome == 'true') {
+                    $output_item['cover'] = $output_item['pic'];
+                    unset($output_item['pic']);
+                    unset($output_item['album']);
+                }
+
+                $is_first = $first;
+                if ($is_first) {
+                    $first = false;
+                } else {
+                    echo ',';
+                }
+                $item_json = json_encode($output_item);
+                echo $item_json;
+                if ($cache_json !== null) {
+                    $cache_item_json = ($handsome == 'true') ? json_encode($item) : $item_json;
+                    $cache_json .= $is_first ? $cache_item_json : ',' . $cache_item_json;
+                }
+                $count++;
+                if (($count % 50) === 0) {
+                    echo "\n";
+                    @flush();
+                }
+            }
+        }
+        echo ']';
+        if ($cache_json !== null) {
+            $cache_json .= ']';
+            apcu_store($cache_key, $cache_json, PLAYLIST_CACHE_TIME);
+        }
+        @flush();
+        exit;
+    }
     $data = $api->playlist($id);
     if ($data == '[]') {
         echo '{"error":"歌单不存在或为空"}';
@@ -243,7 +376,7 @@ if ($type == 'playlist') {
 
     $playlist_json = json_encode($playlist);
 
-    if (APCU_CACHE) {
+    if (APCU_CACHE && !$stream_enabled) {
         apcu_store($cache_key, $playlist_json, PLAYLIST_CACHE_TIME);
     }
 
@@ -272,7 +405,8 @@ if ($type == 'playlist') {
         'limit' => isset($_GET['limit']) ? $_GET['limit'] : 50,
     );
 
-    if (!checkRateLimit($ip)) {
+    $rate_profile = getRateProfile($type, false);
+    if (!checkRateLimit($ip, $rate_profile['ip'], $rate_profile['total'], $rate_profile['window'], $rate_profile['scope'])) {
         http_response_code(429);
         echo '{"error":"rate limit exceeded"}';
         exit;
@@ -330,6 +464,7 @@ if ($type == 'playlist') {
         exit;
     }
 
+    $cache_hit = false;
     if (APCU_CACHE) {
         $apcu_time = $type == 'url' ? URL_CACHE_TIME : CACHE_TIME;
         // 根据不同类型构建缓存键
@@ -362,6 +497,13 @@ if ($type == 'playlist') {
         }
 
         if (!$refresh && apcu_exists($apcu_type_key)) {
+            $cache_hit = true;
+            $rate_profile = getRateProfile($type, true);
+            if (!checkRateLimit($ip, $rate_profile['ip'], $rate_profile['total'], $rate_profile['window'], $rate_profile['scope'])) {
+                http_response_code(429);
+                echo '{"error":"rate limit exceeded"}';
+                exit;
+            }
             $data = apcu_fetch($apcu_type_key);
             return_data($type, $data);
         }
@@ -370,11 +512,13 @@ if ($type == 'playlist') {
             $apcu_song_id_key = $server . 'song_id' . $id;
             if (!$refresh && apcu_exists($apcu_song_id_key)) {
                 $song = apcu_fetch($apcu_song_id_key);
+                $cache_hit = true;
             }
         }
     }
 
-    if (!checkRateLimit($ip)) {
+    $rate_profile = getRateProfile($type, $cache_hit);
+    if (!checkRateLimit($ip, $rate_profile['ip'], $rate_profile['total'], $rate_profile['window'], $rate_profile['scope'])) {
         http_response_code(429);
         echo '{"error":"rate limit exceeded"}';
         exit;
@@ -474,28 +618,196 @@ function get_pic_url($api, $source, $pic_id, $picsize, $img_redirect)
 }
 
 /**
+ * 获取限流配置
+ * @return array
+ */
+function getRateProfile($type, $cache_hit)
+{
+    $profiles = getRateLimitProfiles();
+    $is_list = in_array($type, ['playlist', 'search']);
+    if ($is_list) {
+        $profile = $cache_hit ? $profiles['list_cache'] : $profiles['list_nocache'];
+        $profile['scope'] = $cache_hit ? 'list_cache' : 'list_nocache';
+        return $profile;
+    }
+
+    $profile = $cache_hit ? $profiles['other_cache'] : $profiles['other_nocache'];
+    $profile['scope'] = $cache_hit ? 'other_cache' : 'other_nocache';
+    return $profile;
+}
+
+/**
+ * 规范化限流作用域
+ * @return string
+ */
+function normalizeRateScope($scope)
+{
+    return preg_replace('/[^a-z0-9_]/i', '_', $scope);
+}
+
+/**
+ * 获取限流存储类型
+ * @return string
+ */
+function getRateLimitStorage()
+{
+    if (function_exists('apcu_enabled') && apcu_enabled()) {
+        return 'apcu';
+    }
+    if (defined('CACHE') && CACHE) {
+        return 'file';
+    }
+    return 'none';
+}
+
+/**
+ * 获取限流配置
+ * @return array
+ */
+function getRateLimitProfiles()
+{
+    global $config;
+    $defaults = array(
+        'list_nocache' => array('window' => 30, 'ip' => 30, 'total' => 70),
+        'list_cache' => array('window' => 30, 'ip' => 90, 'total' => 180),
+        'other_nocache' => array('window' => 30, 'ip' => 90, 'total' => 180),
+        'other_cache' => array('window' => 30, 'ip' => 300, 'total' => 600),
+    );
+
+    $profiles = array();
+    if (isset($config['rate_limit_profiles']) && is_array($config['rate_limit_profiles'])) {
+        $profiles = $config['rate_limit_profiles'];
+    }
+
+    foreach ($defaults as $key => $def) {
+        if (!isset($profiles[$key]) || !is_array($profiles[$key])) {
+            $profiles[$key] = $def;
+            continue;
+        }
+        $profiles[$key]['window'] = isset($profiles[$key]['window']) ? (int)$profiles[$key]['window'] : $def['window'];
+        $profiles[$key]['ip'] = isset($profiles[$key]['ip']) ? (int)$profiles[$key]['ip'] : $def['ip'];
+        $profiles[$key]['total'] = isset($profiles[$key]['total']) ? (int)$profiles[$key]['total'] : $def['total'];
+    }
+
+    return $profiles;
+}
+
+/**
+ * 获取 debug 限流配置
+ * @return array
+ */
+function getRateLimitDebugProfile()
+{
+    global $config;
+    $default = array('window' => 60, 'ip' => 5, 'total' => 30);
+    if (!isset($config['rate_limit_debug']) || !is_array($config['rate_limit_debug'])) {
+        return $default;
+    }
+    $profile = $config['rate_limit_debug'];
+    return array(
+        'window' => isset($profile['window']) ? (int)$profile['window'] : $default['window'],
+        'ip' => isset($profile['ip']) ? (int)$profile['ip'] : $default['ip'],
+        'total' => isset($profile['total']) ? (int)$profile['total'] : $default['total'],
+    );
+}
+
+/**
+ * 获取限流状态
+ * @return array
+ */
+function getRateLimitStatus($ip, $profiles)
+{
+    $result = array('ip' => array(), 'total' => array());
+    foreach ($profiles as $scope => $profile) {
+        $counts = getRateLimitCounts($ip, $scope);
+        $result['ip'][$scope] = array(
+            'count' => $counts['ip'],
+            'limit' => $profile['ip'],
+            'window' => $profile['window']
+        );
+        $result['total'][$scope] = array(
+            'count' => $counts['total'],
+            'limit' => $profile['total'],
+            'window' => $profile['window']
+        );
+    }
+    return $result;
+}
+
+/**
+ * 获取限流计数
+ * @return array
+ */
+function getRateLimitCounts($ip, $scope)
+{
+    $scope = normalizeRateScope($scope);
+    $storage = getRateLimitStorage();
+
+    if ($storage === 'apcu') {
+        $key_ip = 'meting_rl_ip_' . $scope . '_' . md5($ip);
+        $key_total = 'meting_rl_total_' . $scope;
+        $ip_count = apcu_fetch($key_ip);
+        $total_count = apcu_fetch($key_total);
+        return array(
+            'ip' => ($ip_count === false ? 0 : (int)$ip_count),
+            'total' => ($total_count === false ? 0 : (int)$total_count)
+        );
+    }
+
+    if ($storage === 'file') {
+        $dir = defined('CACHE_DIR') ? CACHE_DIR : __DIR__ . '/cache';
+        $rl_dir = $dir . '/ratelimit';
+        $file_ip = $rl_dir . '/' . $scope . '_' . md5($ip) . '.json';
+        $file_total = $rl_dir . '/' . $scope . '_total.json';
+        $ip_data = rateLimitFileRead($file_ip);
+        $total_data = rateLimitFileRead($file_total);
+        return array(
+            'ip' => $ip_data['count'],
+            'total' => $total_data['count']
+        );
+    }
+
+    return array('ip' => 0, 'total' => 0);
+}
+
+/**
  * 检查 IP 限流
  * @return bool true=通过, false=超限
  */
-function checkRateLimit($ip)
+function checkRateLimit($ip, $limit_ip = null, $limit_total = null, $window = null, $scope = 'default')
 {
     if (!defined('RATE_LIMIT_ENABLE') || !RATE_LIMIT_ENABLE) {
         return true;
     }
 
-    $window = defined('RATE_LIMIT_WINDOW') ? RATE_LIMIT_WINDOW : 60;
-    $limit = defined('RATE_LIMIT_COUNT') ? RATE_LIMIT_COUNT : 60;
+    $window = $window !== null ? $window : (defined('RATE_LIMIT_WINDOW') ? RATE_LIMIT_WINDOW : 60);
+    $limit_ip = $limit_ip !== null ? $limit_ip : (defined('RATE_LIMIT_COUNT') ? RATE_LIMIT_COUNT : 60);
+    $limit_total = $limit_total !== null ? $limit_total : $limit_ip;
 
     // 1. 优先使用 APCu
     if (function_exists('apcu_enabled') && apcu_enabled()) {
-        $key = 'meting_rl_' . md5($ip);
-        if (!apcu_exists($key)) {
-            apcu_store($key, 1, $window);
-            return true;
+        $scope = normalizeRateScope($scope);
+        $key_ip = 'meting_rl_ip_' . $scope . '_' . md5($ip);
+        $key_total = 'meting_rl_total_' . $scope;
+
+        $ip_ok = true;
+        $total_ok = true;
+
+        if (!apcu_exists($key_ip)) {
+            apcu_store($key_ip, 1, $window);
         } else {
-            $count = apcu_inc($key);
-            return $count <= $limit;
+            $count_ip = apcu_inc($key_ip);
+            $ip_ok = $count_ip <= $limit_ip;
         }
+
+        if (!apcu_exists($key_total)) {
+            apcu_store($key_total, 1, $window);
+        } else {
+            $count_total = apcu_inc($key_total);
+            $total_ok = $count_total <= $limit_total;
+        }
+
+        return $ip_ok && $total_ok;
     }
 
     // 2. 降级使用文件缓存 (如果开启了文件缓存)
@@ -506,49 +818,85 @@ function checkRateLimit($ip)
             if (!@mkdir($rl_dir, 0777, true)) return true; // 无法创建目录则跳过限流
         }
 
-        $file = $rl_dir . '/' . md5($ip) . '.json';
-        $current_time = time();
+        $scope = normalizeRateScope($scope);
+        $file_ip = $rl_dir . '/' . $scope . '_' . md5($ip) . '.json';
+        $file_total = $rl_dir . '/' . $scope . '_total.json';
 
-        // 简单的文件锁机制
-        $fp = @fopen($file, 'c+');
-        if (!$fp) return true;
-
-        if (flock($fp, LOCK_EX)) {
-            $content = fread($fp, 1024);
-            $data = json_decode($content, true);
-
-            if (!$data || $current_time - $data['start'] > $window) {
-                // 新窗口
-                $data = [
-                    'start' => $current_time,
-                    'count' => 1
-                ];
-                ftruncate($fp, 0);
-                rewind($fp);
-                fwrite($fp, json_encode($data));
-                flock($fp, LOCK_UN);
-                fclose($fp);
-                return true;
-            } else {
-                // 现有窗口
-                if ($data['count'] >= $limit) {
-                    flock($fp, LOCK_UN);
-                    fclose($fp);
-                    return false;
-                }
-                $data['count']++;
-                ftruncate($fp, 0);
-                rewind($fp);
-                fwrite($fp, json_encode($data));
-                flock($fp, LOCK_UN);
-                fclose($fp);
-                return true;
-            }
-        }
-        fclose($fp);
+        $ip_ok = rateLimitFileCheck($file_ip, $window, $limit_ip);
+        $total_ok = rateLimitFileCheck($file_total, $window, $limit_total);
+        return $ip_ok && $total_ok;
     }
 
     return true;
+}
+
+/**
+ * 文件限流检查
+ * @return bool true=通过, false=超限
+ */
+function rateLimitFileCheck($file, $window, $limit)
+{
+    $current_time = time();
+    $fp = @fopen($file, 'c+');
+    if (!$fp) return true;
+
+    if (!flock($fp, LOCK_EX)) {
+        fclose($fp);
+        return true;
+    }
+
+    $content = stream_get_contents($fp);
+    $data = json_decode($content, true);
+    if (!$data || $current_time - $data['start'] > $window) {
+        // 新窗口
+        $data = array(
+            'start' => $current_time,
+            'count' => 1
+        );
+        ftruncate($fp, 0);
+        rewind($fp);
+        fwrite($fp, json_encode($data));
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        return true;
+    }
+
+    if ($data['count'] >= $limit) {
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        return false;
+    }
+
+    $data['count']++;
+    ftruncate($fp, 0);
+    rewind($fp);
+    fwrite($fp, json_encode($data));
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    return true;
+}
+
+/**
+ * 文件限流读取
+ * @return array
+ */
+function rateLimitFileRead($file)
+{
+    if (!is_file($file)) {
+        return array('count' => 0, 'start' => 0);
+    }
+    $content = @file_get_contents($file);
+    if ($content === false) {
+        return array('count' => 0, 'start' => 0);
+    }
+    $data = json_decode($content, true);
+    if (!$data || !isset($data['count'])) {
+        return array('count' => 0, 'start' => 0);
+    }
+    return array(
+        'count' => (int)$data['count'],
+        'start' => isset($data['start']) ? (int)$data['start'] : 0
+    );
 }
 
 function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'false', $img_redirect = 'false', $lrctype = null)
