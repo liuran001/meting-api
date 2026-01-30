@@ -223,6 +223,7 @@ if ($type == 'debug') {
                 echo '{"error":"rate limit exceeded"}';
                 exit;
             }
+            setCacheHeaders('playlist');
             $cached_data = apcu_fetch($cache_key);
             // 根据当前请求的handsome状态动态转换数据
             if ($handsome == 'true') {
@@ -274,6 +275,7 @@ if ($type == 'debug') {
         @ob_implicit_flush(1);
         header('X-Accel-Buffering: no');
         @set_time_limit(0);
+        setCacheHeaders('playlist');
 
         echo '[';
         $cache_json = APCU_CACHE ? '[' : null;
@@ -381,6 +383,7 @@ if ($type == 'debug') {
     }
 
     // 根据当前请求的handsome状态动态转换并输出
+    setCacheHeaders('playlist');
     if ($handsome == 'true') {
         foreach ($playlist as &$item) {
             // 转换 pic 为 cover
@@ -455,6 +458,7 @@ if ($type == 'debug') {
 
     $search = json_encode($search, JSON_UNESCAPED_UNICODE);
     header('Content-Type: application/json; charset=utf-8');
+    setCacheHeaders('search');
     echo $search;
     exit;
 } else {
@@ -1063,6 +1067,7 @@ function song2data($api, $song, $type, $id, $dwrc, $picsize, $br, $handsome = 'f
 
 function return_data($type, $data)
 {
+    setCacheHeaders($type);
     if (in_array($type, ['url', 'pic'])) {
         header('HTTP/1.1 302 Temporary Redirect');
         header('Location: ' . $data);
@@ -1070,4 +1075,41 @@ function return_data($type, $data)
         echo $data;
     }
     exit;
+}
+
+/**
+ * 按类型设置缓存时间
+ */
+function setCacheHeaders($type)
+{
+    $max_age = getCacheMaxAge($type);
+    if ($max_age <= 0) {
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        return;
+    }
+    $max_age = (int)$max_age;
+    header('Cache-Control: public, max-age=' . $max_age . ', s-maxage=' . $max_age);
+    header('Expires: ' . gmdate('D, d M Y H:i:s', time() + $max_age) . ' GMT');
+}
+
+/**
+ * 获取类型对应的缓存时间
+ */
+function getCacheMaxAge($type)
+{
+    if ($type == 'playlist') {
+        return defined('PLAYLIST_CACHE_TIME') ? PLAYLIST_CACHE_TIME : 0;
+    }
+    if ($type == 'url') {
+        return defined('URL_CACHE_TIME') ? URL_CACHE_TIME : 0;
+    }
+    if (in_array($type, ['pic', 'lrc', 'song', 'name', 'artist', 'album'])) {
+        return defined('CACHE_TIME') ? CACHE_TIME : 0;
+    }
+    if ($type == 'search') {
+        return 600;
+    }
+    return 0;
 }
